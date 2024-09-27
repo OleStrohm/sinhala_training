@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::collections::BTreeMap;
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
 const HOVER_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
@@ -13,12 +14,23 @@ struct AnswerBox;
 struct CanAnswer(bool);
 #[derive(Debug, Resource)]
 struct AnswerText(String);
+#[derive(Debug, Resource)]
+struct Questions(BTreeMap<String, String>);
 
 fn main() {
+    let questions = BTreeMap::<String, String>::from([
+        ("ක".into(), "ka".into()),
+        ("ග".into(), "ga".into()),
+        ("ච".into(), "ca".into()),
+        ("ජ".into(), "ja".into()),
+        ("ට".into(), "ṭa".into()),
+    ]);
+
     App::new()
         .add_event::<AnsweredEvent>()
         .insert_resource(CanAnswer(true))
-        .insert_resource(AnswerText("Button 1!".into()))
+        .insert_resource(AnswerText(questions.get("ක").unwrap().into()))
+        .insert_resource(Questions(questions))
         .add_plugins(
             DefaultPlugins
                 .set(AssetPlugin {
@@ -41,7 +53,7 @@ fn main() {
         .run();
 }
 
-fn spawn_text(mut commands: Commands) {
+fn spawn_text(mut commands: Commands, asset_server: Res<AssetServer>, questions: Res<Questions>) {
     commands.spawn(Camera2dBundle::default());
     let toplevel = commands
         .spawn(NodeBundle {
@@ -73,8 +85,17 @@ fn spawn_text(mut commands: Commands) {
         .with_children(|commands| {
             commands.spawn((
                 QuestionText,
-                TextBundle::from_section("Sinhala character!", default())
-                    .with_text_justify(JustifyText::Center),
+                TextBundle::from_section(
+                    "ක",
+                    TextStyle {
+                        font: asset_server.load(
+                            "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf",
+                        ),
+                        font_size: 75.0,
+                        ..default()
+                    },
+                )
+                .with_text_justify(JustifyText::Center),
             ));
         })
         .id();
@@ -94,13 +115,14 @@ fn spawn_text(mut commands: Commands) {
             },
         ))
         .with_children(|commands| {
-            for i in 0..5 {
+            for answer in questions.0.values() {
                 commands
                     .spawn(ButtonBundle {
                         style: Style {
-                            width: Val::Px(150.0),
-                            height: Val::Px(65.0),
+                            //width: Val::Px(150.0),
+                            //height: Val::Px(65.0),
                             border: UiRect::all(Val::Px(5.0)),
+                            margin: UiRect::all(Val::Px(10.0)),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             ..default()
@@ -110,7 +132,15 @@ fn spawn_text(mut commands: Commands) {
                         ..default()
                     })
                     .with_children(|commands| {
-                        commands.spawn(TextBundle::from_section(format!("Button {i}!"), default()));
+                        commands.spawn(TextBundle::from_section(
+                            answer,
+                            TextStyle {
+                                font: asset_server
+                                    .load("fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.ttf"),
+                                font_size: 75.0,
+                                ..default()
+                            },
+                        ));
                     });
             }
         })
