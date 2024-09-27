@@ -215,7 +215,7 @@ fn spawn_text(
         })
         .id();
 
-    commands.entity(toplevel).push_children(&[top, bottom]);
+    commands.entity(toplevel).add_children(&[top, bottom]);
 }
 
 fn button_system(
