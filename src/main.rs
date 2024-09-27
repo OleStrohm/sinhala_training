@@ -36,6 +36,20 @@ fn main() {
         ("ච".into(), "ca".into()),
         ("ජ".into(), "ja".into()),
         ("ට".into(), "ṭa".into()),
+        ("බැ".into(), "bæ".into()),
+        ("බි".into(), "bi".into()),
+        ("බු".into(), "bu".into()),
+        ("බෙ".into(), "be".into()),
+        ("බො".into(), "bo".into()),
+        ("බ්".into(), "b".into()),
+        ("කා".into(), "kā".into()),
+        ("කෑ".into(), "kǣ".into()),
+        ("කී".into(), "kī".into()),
+        ("කූ".into(), "kū".into()),
+        ("කේ".into(), "kē".into()),
+        ("කෝ".into(), "kō".into()),
+        ("ත".into(), "ta".into()),
+        ("ඩ".into(), "ḍa".into()),
     ]);
 
     let mut thread_rng = rand::thread_rng();
@@ -69,7 +83,7 @@ fn main() {
         .add_systems(
             Update,
             (
-                reset_in_1_second,
+                reset_one_second_after_answer,
                 setup_question,
                 button_system,
                 handle_answer,
@@ -79,7 +93,7 @@ fn main() {
         .run();
 }
 
-fn reset_in_1_second(
+fn reset_one_second_after_answer(
     mut could_answer: Local<f32>,
     time: Res<Time>,
     can_answer: Res<CanAnswer>,
@@ -174,10 +188,11 @@ fn spawn_text(
             AnswerBox,
             NodeBundle {
                 style: Style {
+                    display: Display::Grid,
                     flex_grow: 3.0,
                     width: Val::Percent(100.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
+                    grid_template_rows: vec![RepeatedGridTrack::percent(5, (100.0 - 2.0) / 5.0)],
+                    grid_template_columns: vec![RepeatedGridTrack::percent(5, (100.0 - 2.0) / 5.0)],
                     ..default()
                 },
                 ..default()
@@ -252,7 +267,7 @@ fn button_system(
 
 fn handle_answer(
     children: Query<&Children>,
-    mut buttons: Query<(Entity, &mut BackgroundColor, &mut BorderColor), With<Button>>,
+    mut buttons: Query<(Entity, &mut BackgroundColor, &mut BorderColor, &Children), With<Button>>,
     text: Query<&Text>,
     mut answered: ResMut<Events<AnsweredEvent>>,
     mut can_answer: ResMut<CanAnswer>,
@@ -268,9 +283,16 @@ fn handle_answer(
             .sections[0]
             .value;
         let correct_answer = questions.0.get(&question.0).unwrap();
+        let correct_entity = buttons
+            .iter()
+            .find(|(_, _, _, children)| {
+                &text.get(children[0]).unwrap().sections[0].value == correct_answer
+            })
+            .unwrap()
+            .0;
         println!("Answered: {answer}, correct answer: {correct_answer}");
 
-        for (entity, mut color, mut border_color) in &mut buttons {
+        for (entity, mut color, mut border_color, _) in &mut buttons {
             if entity == answered_entity {
                 *color = PRESSED_BUTTON.into();
                 if answer == correct_answer {
@@ -278,6 +300,9 @@ fn handle_answer(
                 } else {
                     border_color.0 = Color::srgb(1.0, 0.0, 0.0);
                 }
+            } else if entity == correct_entity {
+                *color = NORMAL_BUTTON.into();
+                border_color.0 = Color::srgb(0.0, 0.0, 1.0);
             } else {
                 *color = NORMAL_BUTTON.into();
                 border_color.0 = Color::BLACK;
