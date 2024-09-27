@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use rand::seq::IteratorRandom;
 use std::collections::BTreeMap;
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
@@ -13,23 +14,39 @@ struct AnswerBox;
 #[derive(Debug, Resource)]
 struct CanAnswer(bool);
 #[derive(Debug, Resource)]
-struct AnswerText(String);
+struct Question(String);
 #[derive(Debug, Resource)]
 struct Questions(BTreeMap<String, String>);
+
+#[derive(Event)]
+struct AnsweredEvent(pub Entity);
+#[derive(Event)]
+struct RestartEvent;
 
 fn main() {
     let questions = BTreeMap::<String, String>::from([
         ("ක".into(), "ka".into()),
-        ("ග".into(), "ga".into()),
+        ("කි".into(), "ki".into()),
+        ("කැ".into(), "kæ".into()),
+        ("කු".into(), "ku".into()),
+        ("කෙ".into(), "ke".into()),
+        ("කො".into(), "ko".into()),
+        ("ක්".into(), "k".into()),
+        ("බ".into(), "ba".into()),
         ("ච".into(), "ca".into()),
         ("ජ".into(), "ja".into()),
         ("ට".into(), "ṭa".into()),
     ]);
 
+    let mut thread_rng = rand::thread_rng();
+    let question = questions.keys().choose(&mut thread_rng).unwrap().into();
+    //let question: String  = "කො".into();
+
     App::new()
         .add_event::<AnsweredEvent>()
+        .add_event::<RestartEvent>()
         .insert_resource(CanAnswer(true))
-        .insert_resource(AnswerText(questions.get("ක").unwrap().into()))
+        .insert_resource(Question(question))
         .insert_resource(Questions(questions))
         .add_plugins(
             DefaultPlugins
@@ -49,11 +66,63 @@ fn main() {
                 }),
         )
         .add_systems(Startup, spawn_text)
-        .add_systems(Update, (button_system, handle_answer).chain())
+        .add_systems(
+            Update,
+            (
+                reset_in_1_second,
+                setup_question,
+                button_system,
+                handle_answer,
+            )
+                .chain(),
+        )
         .run();
 }
 
-fn spawn_text(mut commands: Commands, asset_server: Res<AssetServer>, questions: Res<Questions>) {
+fn reset_in_1_second(
+    mut could_answer: Local<f32>,
+    time: Res<Time>,
+    can_answer: Res<CanAnswer>,
+    mut event_writer: EventWriter<RestartEvent>,
+) {
+    if can_answer.0 {
+        *could_answer = time.elapsed_seconds();
+    } else if *could_answer + 1.0 < time.elapsed_seconds() {
+        event_writer.send(RestartEvent);
+        *could_answer = time.elapsed_seconds();
+    }
+}
+
+fn setup_question(
+    mut event_reader: EventReader<RestartEvent>,
+    mut question_text: Query<&mut Text, With<QuestionText>>,
+    mut question: ResMut<Question>,
+    mut can_answer: ResMut<CanAnswer>,
+    mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<Button>>,
+    questions: Res<Questions>,
+) {
+    for _ in event_reader.read() {
+        let mut question_text = question_text.single_mut();
+        let mut thread_rng = rand::thread_rng();
+        let new_question = questions.0.keys().choose(&mut thread_rng).unwrap();
+        question_text.sections[0].value = new_question.into();
+        question.0 = new_question.into();
+
+        can_answer.0 = true;
+
+        for (mut color, mut border_color) in &mut buttons {
+            color.0 = NORMAL_BUTTON;
+            border_color.0 = Color::BLACK;
+        }
+    }
+}
+
+fn spawn_text(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    question: Res<Question>,
+    questions: Res<Questions>,
+) {
     commands.spawn(Camera2dBundle::default());
     let toplevel = commands
         .spawn(NodeBundle {
@@ -86,7 +155,7 @@ fn spawn_text(mut commands: Commands, asset_server: Res<AssetServer>, questions:
             commands.spawn((
                 QuestionText,
                 TextBundle::from_section(
-                    "ක",
+                    &question.0,
                     TextStyle {
                         font: asset_server.load(
                             "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf",
@@ -149,9 +218,6 @@ fn spawn_text(mut commands: Commands, asset_server: Res<AssetServer>, questions:
     commands.entity(toplevel).push_children(&[top, bottom]);
 }
 
-#[derive(Event)]
-struct AnsweredEvent(pub Entity);
-
 fn button_system(
     mut interaction_query: Query<
         (Entity, &Interaction, &mut BackgroundColor, &mut BorderColor),
@@ -190,7 +256,8 @@ fn handle_answer(
     text: Query<&Text>,
     mut answered: ResMut<Events<AnsweredEvent>>,
     mut can_answer: ResMut<CanAnswer>,
-    answer_text: Res<AnswerText>,
+    question: Res<Question>,
+    questions: Res<Questions>,
 ) {
     for AnsweredEvent(answered_entity) in answered.drain().take(1) {
         *can_answer = CanAnswer(false);
@@ -200,12 +267,13 @@ fn handle_answer(
             .unwrap()
             .sections[0]
             .value;
-        println!("Answered: {answer}, answer: {}", answer_text.0);
+        let correct_answer = questions.0.get(&question.0).unwrap();
+        println!("Answered: {answer}, correct answer: {correct_answer}");
 
         for (entity, mut color, mut border_color) in &mut buttons {
             if entity == answered_entity {
                 *color = PRESSED_BUTTON.into();
-                if answer == &answer_text.0 {
+                if answer == correct_answer {
                     border_color.0 = Color::srgb(0.0, 1.0, 0.0);
                 } else {
                     border_color.0 = Color::srgb(1.0, 0.0, 0.0);
