@@ -24,6 +24,27 @@ enum TranslateDirection {
     SinhalaToEnglish,
     EnglishToSinhala,
 }
+impl TranslateDirection {
+    pub fn question_font(&self, asset_server: &AssetServer) -> Handle<Font> {
+        match *self {
+            TranslateDirection::SinhalaToEnglish => asset_server
+                .load("fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf"),
+            TranslateDirection::EnglishToSinhala => {
+                asset_server.load("fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.ttf")
+            }
+        }
+    }
+
+    pub fn answer_font(&self, asset_server: &AssetServer) -> Handle<Font> {
+        match *self {
+            TranslateDirection::SinhalaToEnglish => {
+                asset_server.load("fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.ttf")
+            }
+            TranslateDirection::EnglishToSinhala => asset_server
+                .load("fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf"),
+        }
+    }
+}
 #[derive(Debug, Resource, Deref, DerefMut)]
 struct CanAnswer(bool);
 #[derive(Debug, Resource, Deref, DerefMut, PartialEq, Eq)]
@@ -214,6 +235,7 @@ fn setup_question(
     mut answer_texts: Query<(Entity, &mut Text), (With<AnswerText>, Without<QuestionText>)>,
     questions: Res<Questions>,
     translation_direction: Res<TranslateDirection>,
+    asset_server: Res<AssetServer>,
 ) {
     for _ in event_reader.read() {
         let mut thread_rng = rand::thread_rng();
@@ -226,6 +248,7 @@ fn setup_question(
             .unwrap()
             .clone();
         question_text.sections[0].value = new_question.question(*translation_direction);
+        question_text.sections[0].style.font = translation_direction.question_font(&asset_server);
         question.0 = new_question;
 
         can_answer.0 = true;
@@ -238,7 +261,9 @@ fn setup_question(
         let mut answer_text_entities = answer_texts.iter().map(|(e, _)| e).collect::<Vec<_>>();
         answer_text_entities.sort();
         for (q, e) in questions.iter().zip(answer_text_entities) {
-            answer_texts.get_mut(e).unwrap().1.sections[0].value = q.answer(*translation_direction);
+            let section = &mut answer_texts.get_mut(e).unwrap().1.sections[0];
+            section.value = q.answer(*translation_direction);
+            section.style.font = translation_direction.answer_font(&asset_server);
         }
     }
 }
