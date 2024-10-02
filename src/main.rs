@@ -328,7 +328,6 @@ fn spawn_text(
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                background_color: Color::srgb(1.0, 0.0, 0.0).into(),
                 ..default()
             })
             .with_children(|commands| {
