@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use rand::seq::IteratorRandom;
+use rand::{prelude::SliceRandom, seq::IteratorRandom};
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
 const HOVER_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
@@ -200,6 +200,7 @@ fn reroll_questions(
             .iter()
             .cloned()
             .choose_multiple(&mut thread_rng, 25);
+        questions.0.shuffle(&mut thread_rng);
         event_writer.send(RestartEvent);
     }
 }
@@ -270,10 +271,10 @@ fn spawn_text(
         .spawn(NodeBundle {
             style: Style {
                 flex_grow: 1.0,
+                display: Display::Grid,
                 width: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                flex_direction: FlexDirection::Row,
+                grid_template_rows: vec![RepeatedGridTrack::percent(1, 100.0)],
+                grid_template_columns: vec![RepeatedGridTrack::percent(3, 100.0 / 3.0)],
                 ..default()
             },
             background_color: Color::srgb(0.20, 0.20, 0.20).into(),
@@ -285,10 +286,10 @@ fn spawn_text(
                     style: Style {
                         display: Display::Flex,
                         height: Val::Percent(100.0),
-                        flex_grow: 1.0,
                         flex_direction: FlexDirection::Column,
                         justify_content: JustifyContent::Start,
                         align_items: AlignItems::Start,
+                        padding: UiRect::all(Val::Px(5.0)),
                         ..default()
                     },
                     ..default()
@@ -320,34 +321,41 @@ fn spawn_text(
                         });
                 });
 
-            commands.spawn((
-                QuestionText,
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font: asset_server.load(
-                            "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf",
-                        ),
-                        font_size: 75.0,
-                        ..default()
-                    },
-                )
-                .with_text_justify(JustifyText::Center),
-            )).insert(
-                Style {
-                    flex_grow: 1.0,
+            commands.spawn(NodeBundle {
+                style: Style {
+                    height: Val::Percent(100.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
                     ..default()
                 },
-            );
+                background_color: Color::srgb(1.0, 0.0, 0.0).into(),
+                ..default()
+            })
+            .with_children(|commands| {
+                commands.spawn((
+                    QuestionText,
+                    TextBundle::from_section(
+                        "",
+                        TextStyle {
+                            font: asset_server.load(
+                                "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf",
+                            ),
+                            font_size: 75.0,
+                            ..default()
+                        },
+                    )
+                    .with_text_justify(JustifyText::Center),
+                ));
+            });
 
             commands.spawn(NodeBundle {
                 style: Style {
                     display: Display::Flex,
                     height: Val::Percent(100.0),
-                    flex_grow: 1.0,
                     flex_direction: FlexDirection::Column,
                     justify_content: JustifyContent::FlexStart,
                     align_items: AlignItems::FlexEnd,
+                    padding: UiRect::all(Val::Px(5.0)),
                     ..default()
                 },
                 ..default()
@@ -388,8 +396,8 @@ fn spawn_text(
                     display: Display::Grid,
                     flex_grow: 3.0,
                     width: Val::Percent(100.0),
-                    grid_template_rows: vec![RepeatedGridTrack::percent(5, (100.0 - 2.0) / 5.0)],
-                    grid_template_columns: vec![RepeatedGridTrack::percent(5, (100.0 - 2.0) / 5.0)],
+                    grid_template_rows: vec![RepeatedGridTrack::percent(5, 20.0)],
+                    grid_template_columns: vec![RepeatedGridTrack::percent(5, 20.0)],
                     ..default()
                 },
                 ..default()
