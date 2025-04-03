@@ -201,10 +201,10 @@ fn reset_one_second_after_answer(
     mut event_writer: EventWriter<RestartEvent>,
 ) {
     if can_answer.0 {
-        *could_answer = time.elapsed_seconds();
-    } else if *could_answer + 1.0 < time.elapsed_seconds() {
+        *could_answer = time.elapsed_secs();
+    } else if *could_answer + 1.0 < time.elapsed_secs() {
         event_writer.send(RestartEvent);
-        *could_answer = time.elapsed_seconds();
+        *could_answer = time.elapsed_secs();
     }
 }
 
@@ -228,11 +228,14 @@ fn reroll_questions(
 
 fn setup_question(
     mut event_reader: EventReader<RestartEvent>,
-    mut question_text: Query<&mut Text, (With<QuestionText>, Without<AnswerText>)>,
+    mut question_text: Query<(&mut Text, &mut TextFont), (With<QuestionText>, Without<AnswerText>)>,
     mut question: ResMut<Question>,
     mut can_answer: ResMut<CanAnswer>,
     mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<AnswerButton>>,
-    mut answer_texts: Query<(Entity, &mut Text), (With<AnswerText>, Without<QuestionText>)>,
+    mut answer_texts: Query<
+        (Entity, &mut Text, &mut TextFont),
+        (With<AnswerText>, Without<QuestionText>),
+    >,
     questions: Res<Questions>,
     translation_direction: Res<TranslateDirection>,
     asset_server: Res<AssetServer>,
@@ -240,15 +243,15 @@ fn setup_question(
     for _ in event_reader.read() {
         let mut thread_rng = rand::thread_rng();
 
-        let mut question_text = question_text.single_mut();
+        let (mut question_text, mut question_font) = question_text.single_mut();
         let new_question = questions
             .iter()
             .filter(|&q| q != &question.0)
             .choose(&mut thread_rng)
             .unwrap()
             .clone();
-        question_text.sections[0].value = new_question.question(*translation_direction);
-        question_text.sections[0].style.font = translation_direction.question_font(&asset_server);
+        **question_text = new_question.question(*translation_direction);
+        question_font.font = translation_direction.question_font(&asset_server);
         question.0 = new_question;
 
         can_answer.0 = true;
@@ -258,12 +261,13 @@ fn setup_question(
             border_color.0 = Color::BLACK;
         }
 
-        let mut answer_text_entities = answer_texts.iter().map(|(e, _)| e).collect::<Vec<_>>();
+        let mut answer_text_entities = answer_texts.iter().map(|(e, ..)| e).collect::<Vec<_>>();
         answer_text_entities.sort();
         for (q, e) in questions.iter().zip(answer_text_entities) {
-            let section = &mut answer_texts.get_mut(e).unwrap().1.sections[0];
-            section.value = q.answer(*translation_direction);
-            section.style.font = translation_direction.answer_font(&asset_server);
+            if let Ok((_, mut text, mut font)) = answer_texts.get_mut(e) {
+                **text = q.answer(*translation_direction);
+                font.font = translation_direction.answer_font(&asset_server);
+            }
         }
     }
 }
@@ -276,25 +280,21 @@ fn spawn_text(
 ) {
     restart.send(RestartEvent);
 
-    commands.spawn(Camera2dBundle::default());
+    commands.spawn(Camera2d);
     let toplevel = commands
-        .spawn(NodeBundle {
-            style: Style {
-                display: Display::Flex,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
+        .spawn((Node {
+            display: Display::Flex,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            flex_direction: FlexDirection::Column,
             ..default()
-        })
+        },))
         .id();
 
     let top = commands
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((Node {
                 flex_grow: 1.0,
                 display: Display::Grid,
                 width: Val::Percent(100.0),
@@ -302,13 +302,11 @@ fn spawn_text(
                 grid_template_columns: vec![RepeatedGridTrack::percent(3, 100.0 / 3.0)],
                 ..default()
             },
-            background_color: Color::srgb(0.20, 0.20, 0.20).into(),
-            ..default()
-        })
+            BackgroundColor(Color::srgb(0.20, 0.20, 0.20)),
+        ))
         .with_children(|commands| {
             commands
-                .spawn(NodeBundle {
-                    style: Style {
+                .spawn(Node {
                         display: Display::Flex,
                         height: Val::Percent(100.0),
                         flex_direction: FlexDirection::Column,
@@ -316,64 +314,54 @@ fn spawn_text(
                         align_items: AlignItems::Start,
                         padding: UiRect::all(Val::Px(5.0)),
                         ..default()
-                    },
-                    ..default()
                 })
                 .with_children(|commands| {
                     commands
                         .spawn((
                             SettingsButton::SwitchDirection,
-                            ButtonBundle {
-                                style: Style {
+                            Button,
+                         Node {
                                     justify_content: JustifyContent::Center,
                                     align_items: AlignItems::Center,
                                     ..default()
                                 },
-                                ..default()
-                            },
                         ))
                         .with_children(|commands| {
-                            commands.spawn((TextBundle::from_section(
-                                "ක -> ka",
-                                TextStyle {
+                            commands.spawn((Text::new(
+                                "ක -> ka",),
+                                TextFont {
                                     font: asset_server.load(
                                         "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf",
                                     ),
                                     font_size: 50.0,
                                     ..default()
                                 },
-                            ),));
+                            ));
                         });
                 });
 
-            commands.spawn(NodeBundle {
-                style: Style {
+            commands.spawn(Node {
                     height: Val::Percent(100.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     ..default()
-                },
-                ..default()
             })
             .with_children(|commands| {
                 commands.spawn((
                     QuestionText,
-                    TextBundle::from_section(
-                        "",
-                        TextStyle {
-                            font: asset_server.load(
-                                "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf",
-                            ),
-                            font_size: 75.0,
-                            ..default()
-                        },
-                    )
-                    .with_text_justify(JustifyText::Center),
+                    Text::new( ""),
+                    TextFont {
+                        font: asset_server.load(
+                            "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf",
+                        ),
+                        font_size: 75.0,
+                        ..default()
+                    },
+                    TextLayout::new_with_justify(JustifyText::Center),
                 ));
             });
 
-            commands.spawn(NodeBundle {
-                style: Style {
+            commands.spawn(Node {
                     display: Display::Flex,
                     height: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
@@ -381,32 +369,27 @@ fn spawn_text(
                     align_items: AlignItems::FlexEnd,
                     padding: UiRect::all(Val::Px(5.0)),
                     ..default()
-                },
-                ..default()
             }) .with_children(|commands| {
                 commands
                     .spawn((
                         SettingsButton::RerollQuestions,
-                        ButtonBundle {
-                            style: Style {
+                        Button,
+                            Node {
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 ..default()
                             },
-                            ..default()
-                        },
                     ))
                     .with_children(|commands| {
-                        commands.spawn((TextBundle::from_section(
-                            " ",
-                            TextStyle {
+                        commands.spawn((Text::new( " "),
+                            TextFont {
                                 font: asset_server.load(
                                     "fonts/0xProto/0xProtoNerdFont-Regular.ttf",
                                 ),
                                 font_size: 50.0,
                                 ..default()
                             },
-                        ),));
+                        ));
                     });
             });
         })
@@ -415,15 +398,12 @@ fn spawn_text(
     let bottom = commands
         .spawn((
             AnswerBox,
-            NodeBundle {
-                style: Style {
-                    display: Display::Grid,
-                    flex_grow: 3.0,
-                    width: Val::Percent(100.0),
-                    grid_template_rows: vec![RepeatedGridTrack::percent(5, 20.0)],
-                    grid_template_columns: vec![RepeatedGridTrack::percent(5, 20.0)],
-                    ..default()
-                },
+            Node {
+                display: Display::Grid,
+                flex_grow: 3.0,
+                width: Val::Percent(100.0),
+                grid_template_rows: vec![RepeatedGridTrack::percent(5, 20.0)],
+                grid_template_columns: vec![RepeatedGridTrack::percent(5, 20.0)],
                 ..default()
             },
         ))
@@ -432,34 +412,29 @@ fn spawn_text(
                 commands
                     .spawn((
                         AnswerButton,
-                        ButtonBundle {
-                            style: Style {
-                                //width: Val::Px(150.0),
-                                //height: Val::Px(65.0),
-                                border: UiRect::all(Val::Px(5.0)),
-                                margin: UiRect::all(Val::Px(10.0)),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            border_color: BorderColor(Color::BLACK),
-                            background_color: NORMAL_BUTTON.into(),
+                        Button,
+                        Node {
+                            //width: Val::Px(150.0),
+                            //height: Val::Px(65.0),
+                            border: UiRect::all(Val::Px(5.0)),
+                            margin: UiRect::all(Val::Px(10.0)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
                             ..default()
                         },
+                        BorderColor(Color::BLACK),
+                        BackgroundColor(NORMAL_BUTTON),
                     ))
                     .with_children(|commands| {
                         commands.spawn((
                             AnswerText,
-                            TextBundle::from_section(
-                                "",
-                                TextStyle {
-                                    font: asset_server.load(
-                                        "fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.ttf",
-                                    ),
-                                    font_size: 75.0,
-                                    ..default()
-                                },
-                            ),
+                            Text::new(""),
+                            TextFont {
+                                font: asset_server
+                                    .load("fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.ttf"),
+                                font_size: 75.0,
+                                ..default()
+                            },
                         ));
                     });
             }
@@ -481,18 +456,14 @@ fn button_system(
         if can_answer.0 {
             match *interaction {
                 Interaction::Pressed => {
-                    //text.sections[0].value = "Press".to_string();
                     *color = PRESSED_BUTTON.into();
-                    //border_color.0 = Color::srgb(1.0, 0.0, 0.0);
                     answered.send(AnsweredEvent(entity));
                 }
                 Interaction::Hovered => {
-                    //text.sections[0].value = "Hover".to_string();
                     *color = HOVER_BUTTON.into();
                     border_color.0 = Color::WHITE;
                 }
                 Interaction::None => {
-                    //text.sections[0].value = "Button".to_string();
                     *color = NORMAL_BUTTON.into();
                     border_color.0 = Color::BLACK;
                 }
@@ -503,14 +474,14 @@ fn button_system(
 
 fn settings_button_system(
     mut interaction_query: Query<(&Interaction, &Children, &SettingsButton), Changed<Interaction>>,
-    mut text: Query<&mut Text>,
+    mut text: Query<(&mut Text, &mut TextColor)>,
     mut reroll_questions: EventWriter<RerollQuestionsEvent>,
     mut restart: EventWriter<RestartEvent>,
     mut translation_direction: ResMut<TranslateDirection>,
 ) {
     for (interaction, children, setting) in &mut interaction_query {
-        let text = &mut text.get_mut(children[0]).unwrap().sections[0];
-        text.style.color = match *interaction {
+        let (mut text, mut color) = text.get_mut(children[0]).unwrap();
+        **color = match *interaction {
             Interaction::Pressed => Color::srgb(1.0, 1.0, 1.0),
             Interaction::Hovered => Color::srgb(0.9, 0.9, 0.9),
             Interaction::None => Color::srgb(0.8, 0.8, 0.8),
@@ -520,11 +491,11 @@ fn settings_button_system(
                 SettingsButton::SwitchDirection => {
                     *translation_direction = match *translation_direction {
                         TranslateDirection::SinhalaToEnglish => {
-                            text.value = "ක <- ka".into();
+                            **text = "ක <- ka".into();
                             TranslateDirection::EnglishToSinhala
                         }
                         TranslateDirection::EnglishToSinhala => {
-                            text.value = "ක -> ka".into();
+                            **text = "ක -> ka".into();
                             TranslateDirection::SinhalaToEnglish
                         }
                     };
@@ -553,28 +524,23 @@ fn handle_answer(
     for AnsweredEvent(answered_entity) in answered.drain().take(1) {
         *can_answer = CanAnswer(false);
 
-        let answer = &text
-            .get(children.get(answered_entity).unwrap()[0])
-            .unwrap()
-            .sections[0]
-            .value;
+        let answer = &text.get(children.get(answered_entity).unwrap()[0]).unwrap();
         let correct_answer = question.answer(*translation_direction);
         let correct_entity = buttons
             .iter()
-            .find(|(_, _, _, children)| {
-                text.get(children[0]).unwrap().sections[0].value == correct_answer
-            })
+            .find(|(_, _, _, children)| text.get(children[0]).unwrap().0 == correct_answer)
             .unwrap()
             .0;
         println!(
-            "Question: {}, Answered: {answer}, correct answer: {correct_answer}",
+            "Question: {}, Answered: {}, correct answer: {correct_answer}",
+            answer.0,
             question.question(*translation_direction)
         );
 
         for (entity, mut color, mut border_color, _) in &mut buttons {
             if entity == answered_entity {
                 *color = PRESSED_BUTTON.into();
-                if answer == &correct_answer {
+                if answer.0 == correct_answer {
                     border_color.0 = Color::srgb(0.0, 1.0, 0.0);
                 } else {
                     border_color.0 = Color::srgb(1.0, 0.0, 0.0);

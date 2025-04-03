@@ -43,7 +43,7 @@
         commonArgs = {
           inherit src buildInputs;
           strictDeps = true;
-          cargoExtraArgs = "--locked --no-default-features";
+          cargoExtraArgs = "--no-default-features";
           CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
         };
         cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
@@ -52,10 +52,18 @@
         binWeb = craneLib.buildTrunkPackage (commonArgs // {
           inherit cargoArtifacts;
 
-          wasm-bindgen-cli = pkgs.wasm-bindgen-cli.override {
-            version = "0.2.93";
-            hash = "sha256-DDdu5mM3gneraM85pAepBXWn3TMofarVR4NbjMdz3r0=";
-            cargoHash = "sha256-birrg+XABBHHKJxfTKAMSlmTVYLmnmqMDfRnmG6g/YQ=";
+          wasm-bindgen-cli = pkgs.buildWasmBindgenCli rec {
+            src = pkgs.fetchCrate {
+              pname = "wasm-bindgen-cli";
+              version = "0.2.100";
+              hash = "sha256-3RJzK7mkYFrs7C/WkhW9Rr4LdP5ofb2FdYGz1P7Uxog=";
+            };
+
+            cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+              inherit src;
+              inherit (src) pname version;
+              hash = "sha256-qsO12332HSjWCVKtf1cUePWWb9IdYUmT+8OPj/XP2WE=";
+            };
           };
         });
 
@@ -77,10 +85,9 @@
             inherit binWeb dockerImage;
             default = binWeb;
           };
-          devShells.default = mkShell {
-              inputsFrom = [ binWeb ];
-              buildInputs = with pkgs; [ trunk ];
+          devShells.default = craneLib.devShell {
               LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
+              packages = [ pkgs.trunk ];
           };
       }
     );
