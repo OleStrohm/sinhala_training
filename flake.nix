@@ -23,9 +23,7 @@
           extensions = [ "rust-analyzer" "clippy" "rust-src" ];
           targets = [ "x86_64-unknown-linux-gnu" "wasm32-unknown-unknown" ];
         };
-        craneLib = ((crane.mkLib pkgs).overrideToolchain rustToolchain).overrideScope (_final: _prev: {
-          inherit (import nixpkgs-for-wasm-bindgen { inherit system; }) wasm-bindgen-cli;
-        });
+        craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
 
         src = lib.cleanSourceWith {
           src = ./.;
