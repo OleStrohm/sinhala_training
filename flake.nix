@@ -31,12 +31,14 @@
             (lib.hasSuffix "\.html" path) ||
             (lib.hasSuffix "\.css" path) ||
             (lib.hasInfix "/assets/" path) ||
+            (lib.hasInfix "/icons/" path) ||
+            (lib.hasInfix "/hooks/" path) ||
             (craneLib.filterCargoSources path type);
         };
         buildInputs = with pkgs; [ 
-            udev alsa-lib vulkan-loader
-            xorg.libX11 xorg.libXcursor xorg.libXi xorg.libXrandr
-            libxkbcommon wayland pkg-config
+          udev alsa-lib vulkan-loader
+          xorg.libX11 xorg.libXcursor xorg.libXi xorg.libXrandr
+          libxkbcommon wayland pkg-config brotli bash
         ];
         commonArgs = {
           inherit src buildInputs;
@@ -64,13 +66,22 @@
               hash = "sha256-qsO12332HSjWCVKtf1cUePWWb9IdYUmT+8OPj/XP2WE=";
             };
           };
+
+          nativeBuildInputs = with pkgs; [ bash brotli ];
         });
 
         dockerImage = pkgs.dockerTools.streamLayeredImage {
           name = "sinhala_training";
           tag = "latest";
+          contents = with pkgs; [ brotli ];
           config = {
-            Cmd = [ "${pkgs.python3Minimal}/bin/python3" "-m" "http.server" "--directory" "${binWeb}" "8080" ];
+            Cmd = [
+              "${pkgs.static-web-server}/bin/static-web-server"
+              "--root" "${binWeb}"
+              "--port" "8080"
+              "--compression-static" "true"
+            ];
+            # static-web-server -d ./ -a 127.0.0.1 -p 8080 --compression-static true
             ExposedPorts = {
                 "8080" = {};
             };
