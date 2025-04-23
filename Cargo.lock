@@ -361,6 +361,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "bevy_asset_loader_derive",
+ "iyes_progress",
  "path-slash",
 ]
 
@@ -1466,6 +1467,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "convert_case"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
+dependencies = [
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1605,6 +1615,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb7330aeadfbe296029522e6c40f315320aba36fc43a5b3632f3795348f3bd22"
 dependencies = [
+ "convert_case",
  "proc-macro2",
  "quote",
  "syn",
@@ -2147,6 +2158,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
+]
+
+[[package]]
+name = "iyes_progress"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1e21ef918f00c8b44adbfd9aeefaab5c22db4bbaa8c5be4376c5404a241777c"
+dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_state",
+ "bevy_utils",
+ "derive_more",
+ "parking_lot",
 ]
 
 [[package]]

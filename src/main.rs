@@ -22,11 +22,11 @@ enum SettingsButton {
 
 #[derive(AssetCollection, Resource)]
 struct Fonts {
-    #[asset(path = "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf")]
+    #[asset(path = "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.subset.ttf")]
     sinhala: Handle<Font>,
-    #[asset(path = "fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.ttf")]
+    #[asset(path = "fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.subset.ttf")]
     english: Handle<Font>,
-    #[asset(path = "fonts/0xProto/0xProtoNerdFont-Regular.ttf")]
+    #[asset(path = "fonts/0xProto/0xProtoNerdFont-Regular.subset.ttf")]
     icons: Handle<Font>,
 }
 
