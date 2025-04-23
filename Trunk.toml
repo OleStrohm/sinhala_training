@@ -8,6 +8,6 @@ port = 8080
 [[hooks]]
 stage = "post_build"
 command = "bash"
-command_arguments = [ "/build/source/hooks/compress_wasm.sh" ]
+command_arguments = [ "./hooks/compress_wasm.sh" ]
 #command = "ls"
 #command_arguments = [ "-la", "/build/source/hooks" ]

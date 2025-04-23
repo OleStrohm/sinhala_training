@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_asset_loader::prelude::*;
 use rand::{prelude::SliceRandom, seq::IteratorRandom};
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
@@ -19,29 +20,40 @@ enum SettingsButton {
     RerollQuestions,
 }
 
+#[derive(AssetCollection, Resource)]
+struct Fonts {
+    #[asset(path = "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf")]
+    sinhala: Handle<Font>,
+    #[asset(path = "fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.ttf")]
+    english: Handle<Font>,
+    #[asset(path = "fonts/0xProto/0xProtoNerdFont-Regular.ttf")]
+    icons: Handle<Font>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Hash, Default, States)]
+enum LoadingStates {
+    #[default]
+    AssetLoading,
+    Loaded,
+}
+
 #[derive(Debug, Resource, Clone, Copy)]
 enum TranslateDirection {
     SinhalaToEnglish,
     EnglishToSinhala,
 }
 impl TranslateDirection {
-    pub fn question_font(&self, asset_server: &AssetServer) -> Handle<Font> {
+    pub fn question_font(&self, fonts: &Fonts) -> Handle<Font> {
         match *self {
-            TranslateDirection::SinhalaToEnglish => asset_server
-                .load("fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf"),
-            TranslateDirection::EnglishToSinhala => {
-                asset_server.load("fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.ttf")
-            }
+            TranslateDirection::SinhalaToEnglish => fonts.sinhala.clone(),
+            TranslateDirection::EnglishToSinhala => fonts.english.clone(),
         }
     }
 
-    pub fn answer_font(&self, asset_server: &AssetServer) -> Handle<Font> {
+    pub fn answer_font(&self, fonts: &Fonts) -> Handle<Font> {
         match *self {
-            TranslateDirection::SinhalaToEnglish => {
-                asset_server.load("fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.ttf")
-            }
-            TranslateDirection::EnglishToSinhala => asset_server
-                .load("fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf"),
+            TranslateDirection::SinhalaToEnglish => fonts.english.clone(),
+            TranslateDirection::EnglishToSinhala => fonts.sinhala.clone(),
         }
     }
 }
@@ -178,7 +190,13 @@ fn main() {
                     ..default()
                 }),
         )
-        .add_systems(Startup, spawn_text)
+        .init_state::<LoadingStates>()
+        .add_loading_state(
+            LoadingState::new(LoadingStates::AssetLoading)
+                .continue_to_state(LoadingStates::Loaded)
+                .load_collection::<Fonts>(),
+        )
+        .add_systems(OnEnter(LoadingStates::Loaded), spawn_text)
         .add_systems(
             Update,
             (
@@ -189,7 +207,8 @@ fn main() {
                 button_system,
                 handle_answer,
             )
-                .chain(),
+                .chain()
+                .run_if(in_state(LoadingStates::Loaded)),
         )
         .run();
 }
@@ -238,7 +257,7 @@ fn setup_question(
     >,
     questions: Res<Questions>,
     translation_direction: Res<TranslateDirection>,
-    asset_server: Res<AssetServer>,
+    fonts: Res<Fonts>,
 ) {
     for _ in event_reader.read() {
         let mut thread_rng = rand::thread_rng();
@@ -251,7 +270,7 @@ fn setup_question(
             .unwrap()
             .clone();
         **question_text = new_question.question(*translation_direction);
-        question_font.font = translation_direction.question_font(&asset_server);
+        question_font.font = translation_direction.question_font(&fonts);
         question.0 = new_question;
 
         can_answer.0 = true;
@@ -266,7 +285,7 @@ fn setup_question(
         for (q, e) in questions.iter().zip(answer_text_entities) {
             if let Ok((_, mut text, mut font)) = answer_texts.get_mut(e) {
                 **text = q.answer(*translation_direction);
-                font.font = translation_direction.answer_font(&asset_server);
+                font.font = translation_direction.answer_font(&fonts);
             }
         }
     }
@@ -274,7 +293,7 @@ fn setup_question(
 
 fn spawn_text(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    fonts: Res<Fonts>,
     mut restart: EventWriter<RestartEvent>,
     questions: Res<Questions>,
 ) {
@@ -294,7 +313,8 @@ fn spawn_text(
         .id();
 
     let top = commands
-        .spawn((Node {
+        .spawn((
+            Node {
                 flex_grow: 1.0,
                 display: Display::Grid,
                 width: Val::Percent(100.0),
@@ -307,32 +327,30 @@ fn spawn_text(
         .with_children(|commands| {
             commands
                 .spawn(Node {
-                        display: Display::Flex,
-                        height: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Column,
-                        justify_content: JustifyContent::Start,
-                        align_items: AlignItems::Start,
-                        padding: UiRect::all(Val::Px(5.0)),
-                        ..default()
+                    display: Display::Flex,
+                    height: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::Start,
+                    align_items: AlignItems::Start,
+                    padding: UiRect::all(Val::Px(5.0)),
+                    ..default()
                 })
                 .with_children(|commands| {
                     commands
                         .spawn((
                             SettingsButton::SwitchDirection,
                             Button,
-                         Node {
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    ..default()
-                                },
+                            Node {
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
                         ))
                         .with_children(|commands| {
-                            commands.spawn((Text::new(
-                                "ක -> ka",),
+                            commands.spawn((
+                                Text::new("ක -> ka"),
                                 TextFont {
-                                    font: asset_server.load(
-                                        "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf",
-                                    ),
+                                    font: fonts.sinhala.clone(),
                                     font_size: 50.0,
                                     ..default()
                                 },
@@ -340,28 +358,28 @@ fn spawn_text(
                         });
                 });
 
-            commands.spawn(Node {
+            commands
+                .spawn(Node {
                     height: Val::Percent(100.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     ..default()
-            })
-            .with_children(|commands| {
-                commands.spawn((
-                    QuestionText,
-                    Text::new( ""),
-                    TextFont {
-                        font: asset_server.load(
-                            "fonts/Noto_Sans_Sinhala/NotoSansSinhala-VariableFont_wdth,wght.ttf",
-                        ),
-                        font_size: 75.0,
-                        ..default()
-                    },
-                    TextLayout::new_with_justify(JustifyText::Center),
-                ));
-            });
+                })
+                .with_children(|commands| {
+                    commands.spawn((
+                        QuestionText,
+                        Text::new(""),
+                        TextFont {
+                            font: fonts.sinhala.clone(),
+                            font_size: 75.0,
+                            ..default()
+                        },
+                        TextLayout::new_with_justify(JustifyText::Center),
+                    ));
+                });
 
-            commands.spawn(Node {
+            commands
+                .spawn(Node {
                     display: Display::Flex,
                     height: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
@@ -369,29 +387,29 @@ fn spawn_text(
                     align_items: AlignItems::FlexEnd,
                     padding: UiRect::all(Val::Px(5.0)),
                     ..default()
-            }) .with_children(|commands| {
-                commands
-                    .spawn((
-                        SettingsButton::RerollQuestions,
-                        Button,
+                })
+                .with_children(|commands| {
+                    commands
+                        .spawn((
+                            SettingsButton::RerollQuestions,
+                            Button,
                             Node {
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 ..default()
                             },
-                    ))
-                    .with_children(|commands| {
-                        commands.spawn((Text::new( " "),
-                            TextFont {
-                                font: asset_server.load(
-                                    "fonts/0xProto/0xProtoNerdFont-Regular.ttf",
-                                ),
-                                font_size: 50.0,
-                                ..default()
-                            },
-                        ));
-                    });
-            });
+                        ))
+                        .with_children(|commands| {
+                            commands.spawn((
+                                Text::new(" "),
+                                TextFont {
+                                    font: fonts.icons.clone(),
+                                    font_size: 50.0,
+                                    ..default()
+                                },
+                            ));
+                        });
+                });
         })
         .id();
 
@@ -430,8 +448,7 @@ fn spawn_text(
                             AnswerText,
                             Text::new(""),
                             TextFont {
-                                font: asset_server
-                                    .load("fonts/Noto_Serif/NotoSerif-VariableFont_wdth,wght.ttf"),
+                                font: fonts.english.clone(),
                                 font_size: 75.0,
                                 ..default()
                             },
