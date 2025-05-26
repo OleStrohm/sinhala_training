@@ -8,6 +8,9 @@ const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
 const HOVER_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
 const PRESSED_BUTTON: Color = Color::srgb(0.20, 0.20, 0.20);
 
+#[derive(Component)]
+struct FitToParent;
+
 #[derive(Debug, Component)]
 struct QuestionText;
 #[derive(Debug, Component)]
@@ -210,17 +213,35 @@ fn main() {
         .add_systems(
             Update,
             (
-                settings_button_system,
-                reset_one_second_after_answer,
-                button_system,
-                handle_answer,
+                (
+                    settings_button_system,
+                    reset_one_second_after_answer,
+                    button_system,
+                    handle_answer,
+                )
+                    .chain(),
+                fit_to_parent,
             )
-                .chain()
                 .run_if(in_state(LoadingStates::Loaded)),
         )
         .add_observer(setup_question)
         .add_observer(reroll_questions)
         .run();
+}
+
+fn fit_to_parent(
+    mut texts: Query<(&ChildOf, &Text, &mut TextFont), With<FitToParent>>,
+    nodes: Query<&ComputedNode>,
+) -> Result {
+    for (parent, text, mut text_font) in &mut texts {
+        let computed = nodes.get(parent.parent())?;
+        let num_chars = text.0.chars().count() as f32;
+        text_font.font_size = (computed.size().x / num_chars)
+            .min(computed.size().y / 3.0)
+            .max(1.0);
+    }
+
+    Ok(())
 }
 
 fn reset_one_second_after_answer(
@@ -427,7 +448,7 @@ fn bottom(questions: &Res<Questions>, fonts: &Res<Fonts>) -> impl Bundle {
                         },
                         BorderColor(Color::BLACK),
                         BackgroundColor(NORMAL_BUTTON),
-                        children![(AnswerText, english("", 75.0, fonts))],
+                        children![(AnswerText, FitToParent, english("", 50.0, fonts))],
                     )
                 })
                 .collect::<Vec<_>>()
