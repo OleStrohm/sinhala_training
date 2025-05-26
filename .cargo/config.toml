@@ -1,0 +1,28 @@
+[unstable]
+codegen-backend = true
+
+#[profile]
+#incremental = true
+
+[profile.dev]
+codegen-backend = "cranelift"
+
+[profile.dev.package."*"]
+codegen-backend = "llvm"
+
+# Disable cranelift for release profile
+[profile.release]
+codegen-backend = "llvm"
+
+# cranelift cannot build wasm32-unknown-unknown out of the box
+[profile.web]
+codegen-backend = "llvm"
+
+[target.x86_64-unknown-linux-gnu]
+#linker = "clang"
+#rustflags = ["-C", "link-arg=-fuse-ld=/nix/store/jbyaxs3xdkgm0zk27mxqpzvwjhx9vm9w-clang-wrapper-19.1.7/bin/ld.mold"]
+rustflags = [
+    "-Zshare-generics=y",
+    "-Zthreads=0",
+    "-Zlinker-features=-lld"
+]

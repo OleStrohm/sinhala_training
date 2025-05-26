@@ -19,11 +19,12 @@
         };
         inherit (pkgs) lib;
 
-        rustToolchain = p: p.rust-bin.stable.latest.default.override {
-          extensions = [ "rust-analyzer" "clippy" "rust-src" ];
+        rustToolchainFor = p: p.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
+          extensions = [ "rust-analyzer" "clippy" "rust-src" "rustc-codegen-cranelift-preview" ];
           targets = [ "x86_64-unknown-linux-gnu" "wasm32-unknown-unknown" ];
-        };
-        craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
+        });
+        rustToolchain = rustToolchainFor pkgs;
+        craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
 
         src = lib.cleanSourceWith {
           src = ./.;
@@ -87,6 +88,11 @@
             };
           };
         };
+        moldDevShell = craneLib.devShell.override {
+          mkShell = pkgs.mkShell.override {
+            stdenv = pkgs.stdenvAdapters.useMoldLinker pkgs.clangStdenv;
+          };
+        };
       in
       with pkgs;
       {
@@ -95,9 +101,10 @@
             inherit binWeb dockerImage;
             default = binWeb;
           };
-          devShells.default = craneLib.devShell {
-              LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
-              packages = [ pkgs.trunk ];
+          devShells.default = moldDevShell {
+            inherit buildInputs;
+            LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
+            packages = [ pkgs.trunk ];
           };
       }
     );

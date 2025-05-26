@@ -4,8 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.15", default-features = false, features = [
-  "bevy_sprite",
+bevy = { version = "0.16.0", default-features = false, features = [
   "bevy_ui",
   "x11",
   "webgl2",
@@ -13,7 +12,8 @@ bevy = { version = "0.15", default-features = false, features = [
   "bevy_window",
   "multi_threaded",
 ]}
-bevy_asset_loader = { version = "0.22.0", features = ["progress_tracking"] }
+bevy_asset_loader = { version = "0.23.0" }
+bevy_simple_subsecond_system = "0.1.11"
 rand = "0.8.5"
 
 [features]
@@ -30,7 +30,7 @@ dev_native = [
 ]
 dev = [
     # Improve compile times for dev builds by linking Bevy as a dynamic library.
-    "bevy/dynamic_linking",
+    # "bevy/dynamic_linking",
     "bevy/bevy_dev_tools",
 ]
 
@@ -50,4 +50,14 @@ codegen-units = 1
 opt-level = 'z'
 lto = true
 strip = true
+
+[profile.wasm-dev]
+inherits = "dev"
+opt-level = 1
+
+[profile.server-dev]
+inherits = "dev"
+
+[profile.android-dev]
+inherits = "dev"
 
