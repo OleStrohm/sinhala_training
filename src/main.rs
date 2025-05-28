@@ -1,14 +1,9 @@
-use std::time::Duration;
-
 use bevy::ecs::spawn::SpawnIter;
 use bevy::prelude::*;
+use bevy::text::ComputedTextBlock;
 use bevy::text::cosmic_text::Buffer;
-use bevy::text::{ComputedTextBlock, CosmicFontSystem};
-use bevy::time::common_conditions::on_timer;
 use bevy_asset_loader::prelude::*;
 use bevy_inspector_egui::bevy_egui::EguiPlugin;
-//use bevy_simple_subsecond_system::prelude::*;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use rand::{prelude::SliceRandom, seq::IteratorRandom};
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
@@ -90,6 +85,8 @@ struct AllQuestions(Vec<Dictionary>);
 struct AnsweredEvent(pub Entity);
 #[derive(Event)]
 struct RestartEvent;
+#[derive(Event)]
+struct NewQuestion;
 #[derive(Event)]
 struct RerollQuestionsEvent;
 
@@ -224,6 +221,7 @@ fn main() {
         .add_systems(Update, fit_to_parent) //.run_if(on_timer(Duration::from_millis(100))))
         .add_observer(setup_question)
         .add_observer(reroll_questions)
+        .add_observer(next_question)
         .run();
 }
 
@@ -263,16 +261,16 @@ fn reset_one_second_after_answer(
     if let AnsweringState::Answered(start_time) = **answering_state
         && time.elapsed_secs() * 1000.0 > start_time as f32 + 1000.0
     {
-        commands.trigger(RestartEvent);
+        commands.trigger(NewQuestion);
     }
 }
 
 fn reroll_questions(
     _: Trigger<RerollQuestionsEvent>,
+    mut commands: Commands,
     all_questions: Res<AllQuestions>,
     current_dictionary: Res<CurrentDictionary>,
     mut questions: ResMut<Questions>,
-    mut commands: Commands,
 ) {
     let mut thread_rng = rand::thread_rng();
     questions.0 = all_questions[current_dictionary.0]
@@ -281,13 +279,31 @@ fn reroll_questions(
         .cloned()
         .choose_multiple(&mut thread_rng, 25);
     questions.0.shuffle(&mut thread_rng);
+
+    commands.trigger(NewQuestion);
+}
+
+fn next_question(
+    _: Trigger<NewQuestion>,
+    mut commands: Commands,
+    questions: Res<Questions>,
+    mut question: ResMut<Question>,
+) {
+    let mut thread_rng = rand::thread_rng();
+    let new_question = questions
+        .iter()
+        .filter(|&q| q != &question.0)
+        .choose(&mut thread_rng)
+        .unwrap()
+        .clone();
+    question.0 = new_question;
+
     commands.trigger(RestartEvent);
 }
 
 fn setup_question(
     _: Trigger<RestartEvent>,
     mut question_text: Query<(&mut Text, &mut TextFont), (With<QuestionText>, Without<AnswerText>)>,
-    mut question: ResMut<Question>,
     mut next_answering_state: ResMut<NextState<AnsweringState>>,
     mut buttons: Query<(&mut BackgroundColor, &mut BorderColor), With<AnswerButton>>,
     mut answer_texts: Query<
@@ -295,22 +311,14 @@ fn setup_question(
         (With<AnswerText>, Without<QuestionText>),
     >,
     questions: Res<Questions>,
+    question: Res<Question>,
     translation_direction: Res<TranslateDirection>,
     fonts: Res<Fonts>,
 ) {
-    let mut thread_rng = rand::thread_rng();
-
     let (mut question_text, mut question_font) = question_text.single_mut().unwrap();
-    let new_question = questions
-        .iter()
-        .filter(|&q| q != &question.0)
-        .choose(&mut thread_rng)
-        .unwrap()
-        .clone();
-    **question_text = new_question.question(*translation_direction);
+    **question_text = question.question(*translation_direction);
     question_font.font = translation_direction.question_font(&fonts);
     question_font.font_size = 75.0;
-    question.0 = new_question;
 
     next_answering_state.set(AnsweringState::Answering);
 
