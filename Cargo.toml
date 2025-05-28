@@ -12,8 +12,9 @@ bevy = { version = "0.16.0", default-features = false, features = [
   "bevy_window",
   "multi_threaded",
 ]}
+bevy-inspector-egui = "0.31.0"
 bevy_asset_loader = { version = "0.23.0" }
-bevy_simple_subsecond_system = "0.1.11"
+#bevy_simple_subsecond_system = "0.1.11"
 rand = "0.8.5"
 
 [features]

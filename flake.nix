@@ -31,13 +31,14 @@
           filter = path: type:
             (lib.hasSuffix "\.html" path) ||
             (lib.hasSuffix "\.css" path) ||
+            (lib.hasSuffix "\.txt" path) ||
             (lib.hasInfix "/assets/" path) ||
             (lib.hasInfix "/icons/" path) ||
             (lib.hasInfix "/hooks/" path) ||
             (craneLib.filterCargoSources path type);
         };
         buildInputs = with pkgs; [ 
-          udev alsa-lib vulkan-loader
+          udev alsa-lib vulkan-loader python312Packages.fonttools
           xorg.libX11 xorg.libXcursor xorg.libXi xorg.libXrandr
           libxkbcommon wayland pkg-config brotli bash
         ];

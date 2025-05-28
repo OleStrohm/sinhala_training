@@ -1,7 +1,14 @@
+use std::time::Duration;
+
 use bevy::ecs::spawn::SpawnIter;
 use bevy::prelude::*;
+use bevy::text::cosmic_text::Buffer;
+use bevy::text::{ComputedTextBlock, CosmicFontSystem};
+use bevy::time::common_conditions::on_timer;
 use bevy_asset_loader::prelude::*;
-use bevy_simple_subsecond_system::prelude::*;
+use bevy_inspector_egui::bevy_egui::EguiPlugin;
+//use bevy_simple_subsecond_system::prelude::*;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use rand::{prelude::SliceRandom, seq::IteratorRandom};
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
@@ -23,6 +30,7 @@ struct AnswerButton;
 enum SettingsButton {
     SwitchDirection,
     RerollQuestions,
+    NextDictionary,
 }
 
 #[derive(AssetCollection, Resource)]
@@ -76,7 +84,7 @@ struct Question(Pair);
 #[derive(Debug, Resource, Deref, DerefMut)]
 struct Questions(Vec<Pair>);
 #[derive(Debug, Resource, Deref, DerefMut)]
-struct AllQuestions(Vec<Pair>);
+struct AllQuestions(Vec<Dictionary>);
 
 #[derive(Event)]
 struct AnsweredEvent(pub Entity);
@@ -111,69 +119,56 @@ mod pair {
         }
     }
 
-    impl From<(&str, &str)> for Pair {
-        fn from((sinhala, english): (&str, &str)) -> Self {
-            Self {
+    impl<'a> TryFrom<Vec<&'a str>> for Pair {
+        type Error = Vec<&'a str>;
+        fn try_from(words: Vec<&'a str>) -> Result<Self, Self::Error> {
+            let [sinhala, english] = words.try_into()?;
+            Ok(Self {
                 sinhala: sinhala.into(),
                 english: english.into(),
-            }
+            })
         }
     }
 }
 
+#[derive(Resource, Debug, Clone)]
+struct Dictionary {
+    title: String,
+    entries: Vec<Pair>,
+}
+
+#[derive(Resource, Debug, Clone)]
+struct CurrentDictionary(usize);
+
 fn main() {
-    let all_questions = Vec::<Pair>::from([
-        ("ක", "ka").into(),
-        ("ඛ", "kha").into(),
-        ("ග", "ga").into(),
-        ("ඝ", "gha").into(),
-        ("ඞ", "ṅa").into(),
-        ("ච", "ca").into(),
-        ("ඡ", "cha").into(),
-        ("ජ", "ja").into(),
-        ("ඣ", "jha").into(),
-        ("ඤ", "ñ").into(),
-        ("ට", "ṭa").into(),
-        ("ඨ", "ṭha").into(),
-        ("ඩ", "ḍa").into(),
-        ("ඪ", "ḍha").into(),
-        ("ණ", "ṇa").into(),
-        ("ත", "ta").into(),
-        ("ථ", "tha").into(),
-        ("ද", "da").into(),
-        ("ධ", "dha").into(),
-        ("න", "na").into(),
-        ("ප", "pa").into(),
-        ("ඵ", "pha").into(),
-        ("බ", "ba").into(),
-        ("භ", "bha").into(),
-        ("ම", "ma").into(),
-        ("ය", "ya").into(),
-        ("ර", "ra").into(),
-        ("ල", "la").into(),
-        ("ව", "va").into(),
-        ("ශ", "śa").into(),
-        ("ෂ", "ṣa").into(),
-        ("ස", "sa").into(),
-        ("හ", "ha").into(),
-        ("ඥ", "jña").into(),
-        ("ළ", "ḷa").into(),
-        ("ෆ", "fa").into(),
-        ("ඟ", "n̆ga").into(),
-        ("ඦ", "n̆ja").into(),
-        ("ඬ", "n̆ḍa").into(),
-        ("ඳ", "n̆da").into(),
-        ("ඹ", "m̆ba").into(),
-        ("අ", "a").into(),
-        ("ඇ", "æ").into(),
-        ("ඉ", "i").into(),
-        ("උ", "u").into(),
-        ("එ", "e").into(),
-        ("ඔ", "o").into(),
-    ]);
+    let dictionaries: Vec<Dictionary> = include_str!("../dictionary.txt")
+        .split("\n\n")
+        .filter_map(|dictionary| {
+            let mut lines = dictionary.lines();
+            let title = lines.next().unwrap().trim_end_matches(':').to_string();
+            if title == "icons" {
+                return None;
+            }
+            let entries = lines
+                .map(|l| {
+                    l.split(" - ")
+                        .map(|t| t.trim())
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .unwrap()
+                })
+                .collect();
+            Some(Dictionary { title, entries })
+        })
+        .collect();
 
     let mut thread_rng = rand::thread_rng();
-    let questions = all_questions.iter().take(25).cloned().collect::<Vec<_>>();
+    let questions = dictionaries[0]
+        .entries
+        .iter()
+        .take(25)
+        .cloned()
+        .collect::<Vec<_>>();
     let question = questions.iter().choose(&mut thread_rng).unwrap().clone();
 
     App::new()
@@ -182,7 +177,8 @@ fn main() {
         .add_event::<RerollQuestionsEvent>()
         .insert_resource(Question(question))
         .insert_resource(Questions(questions))
-        .insert_resource(AllQuestions(all_questions))
+        .insert_resource(AllQuestions(dictionaries))
+        .insert_resource(CurrentDictionary(0))
         .insert_resource(TranslateDirection::SinhalaToEnglish)
         .add_plugins((
             DefaultPlugins
@@ -200,7 +196,11 @@ fn main() {
                     }),
                     ..default()
                 }),
-            SimpleSubsecondPlugin::default(),
+            EguiPlugin {
+                enable_multipass_for_primary_context: true,
+            },
+            //WorldInspectorPlugin::new(),
+            //SimpleSubsecondPlugin::default(),
         ))
         .init_state::<AnsweringState>()
         .init_state::<LoadingStates>()
@@ -213,32 +213,43 @@ fn main() {
         .add_systems(
             Update,
             (
-                (
-                    settings_button_system,
-                    reset_one_second_after_answer,
-                    button_system,
-                    handle_answer,
-                )
-                    .chain(),
-                fit_to_parent,
+                settings_button_system,
+                reset_one_second_after_answer,
+                button_system,
+                handle_answer,
             )
+                .chain()
                 .run_if(in_state(LoadingStates::Loaded)),
         )
+        .add_systems(Update, fit_to_parent) //.run_if(on_timer(Duration::from_millis(100))))
         .add_observer(setup_question)
         .add_observer(reroll_questions)
         .run();
 }
 
+fn buffer_dimensions(buffer: &Buffer) -> Vec2 {
+    let (width, height) = buffer
+        .layout_runs()
+        .map(|run| (run.line_w, run.line_height))
+        .reduce(|(w1, h1), (w2, h2)| (w1.max(w2), h1 + h2))
+        .unwrap_or((0.0, 0.0));
+
+    Vec2::new(width, height).ceil()
+}
+
 fn fit_to_parent(
-    mut texts: Query<(&ChildOf, &Text, &mut TextFont), With<FitToParent>>,
+    mut texts: Query<(&ChildOf, &mut TextFont, &ComputedTextBlock), With<FitToParent>>,
     nodes: Query<&ComputedNode>,
 ) -> Result {
-    for (parent, text, mut text_font) in &mut texts {
-        let computed = nodes.get(parent.parent())?;
-        let num_chars = text.0.chars().count() as f32;
-        text_font.font_size = (computed.size().x / num_chars)
-            .min(computed.size().y / 3.0)
-            .max(1.0);
+    for (parent, mut text_font, computed_text_block) in &mut texts {
+        let computed_size = nodes.get(parent.parent())?.size();
+        let content_size = buffer_dimensions(computed_text_block.buffer());
+        let x_scale = computed_size.x / content_size.x;
+        let y_scale = computed_size.y / content_size.y;
+        let scale = x_scale.min(y_scale);
+        if scale < 1.2 {
+            text_font.font_size *= 0.95;
+        }
     }
 
     Ok(())
@@ -259,12 +270,13 @@ fn reset_one_second_after_answer(
 fn reroll_questions(
     _: Trigger<RerollQuestionsEvent>,
     all_questions: Res<AllQuestions>,
+    current_dictionary: Res<CurrentDictionary>,
     mut questions: ResMut<Questions>,
     mut commands: Commands,
 ) {
     let mut thread_rng = rand::thread_rng();
-    questions.0 = all_questions
-        .0
+    questions.0 = all_questions[current_dictionary.0]
+        .entries
         .iter()
         .cloned()
         .choose_multiple(&mut thread_rng, 25);
@@ -327,43 +339,27 @@ fn button() -> impl Bundle {
     )
 }
 
-fn sinhala(text: impl Into<String>, font_size: f32, fonts: &Res<Fonts>) -> impl Bundle {
+fn text_with_font(text: impl Into<String>, font_size: f32, font: Handle<Font>) -> impl Bundle {
     (
         Text::new(text),
-        TextFont {
-            font: fonts.sinhala.clone(),
-            font_size,
-            ..default()
-        },
+        TextFont::from_font(font).with_font_size(font_size),
         TextLayout::new_with_justify(JustifyText::Center),
     )
+}
+
+fn sinhala(text: impl Into<String>, font_size: f32, fonts: &Res<Fonts>) -> impl Bundle {
+    text_with_font(text, font_size, fonts.sinhala.clone())
 }
 
 fn english(text: impl Into<String>, font_size: f32, fonts: &Res<Fonts>) -> impl Bundle {
-    (
-        Text::new(text),
-        TextFont {
-            font: fonts.english.clone(),
-            font_size,
-            ..default()
-        },
-        TextLayout::new_with_justify(JustifyText::Center),
-    )
+    text_with_font(text, font_size, fonts.english.clone())
 }
 
 fn icon(text: impl Into<String>, font_size: f32, fonts: &Res<Fonts>) -> impl Bundle {
-    (
-        Text::new(text),
-        TextFont {
-            font: fonts.icons.clone(),
-            font_size,
-            ..default()
-        },
-        TextLayout::new_with_justify(JustifyText::Center),
-    )
+    text_with_font(text, font_size, fonts.icons.clone())
 }
 
-fn top(fonts: &Res<Fonts>) -> impl Bundle {
+fn top(dictionary_title: &str, fonts: &Res<Fonts>) -> impl Bundle {
     (
         Node {
             flex_grow: 1.0,
@@ -410,11 +406,18 @@ fn top(fonts: &Res<Fonts>) -> impl Bundle {
                     padding: UiRect::all(Val::Px(5.0)),
                     ..default()
                 },
-                children![(
-                    SettingsButton::RerollQuestions,
-                    button(),
-                    children![icon(" ", 50.0, fonts)],
-                )],
+                children![
+                    (
+                        SettingsButton::RerollQuestions,
+                        button(),
+                        children![icon(" ", 50.0, fonts)],
+                    ),
+                    (
+                        SettingsButton::NextDictionary,
+                        button(),
+                        children![english(dictionary_title, 50.0, fonts)],
+                    )
+                ],
             )
         ],
     )
@@ -457,7 +460,13 @@ fn bottom(questions: &Res<Questions>, fonts: &Res<Fonts>) -> impl Bundle {
     )
 }
 
-fn spawn_text(mut commands: Commands, fonts: Res<Fonts>, questions: Res<Questions>) {
+fn spawn_text(
+    mut commands: Commands,
+    fonts: Res<Fonts>,
+    questions: Res<Questions>,
+    current_dictionary: Res<CurrentDictionary>,
+    dictionaries: Res<AllQuestions>,
+) {
     commands.spawn(Camera2d);
 
     commands.spawn((
@@ -470,7 +479,10 @@ fn spawn_text(mut commands: Commands, fonts: Res<Fonts>, questions: Res<Question
             flex_direction: FlexDirection::Column,
             ..default()
         },
-        children![top(&fonts), bottom(&questions, &fonts)],
+        children![
+            top(&dictionaries[current_dictionary.0].title, &fonts),
+            bottom(&questions, &fonts)
+        ],
     ));
 
     commands.trigger(RestartEvent);
@@ -510,6 +522,8 @@ fn settings_button_system(
     mut text: Query<(&mut Text, &mut TextColor)>,
     mut commands: Commands,
     mut translation_direction: ResMut<TranslateDirection>,
+    mut current_dictionary: ResMut<CurrentDictionary>,
+    dictionaries: Res<AllQuestions>,
 ) {
     for (interaction, children, setting) in &mut interaction_query {
         let (mut text, mut color) = text.get_mut(children[0]).unwrap();
@@ -534,6 +548,11 @@ fn settings_button_system(
                     commands.trigger(RestartEvent);
                 }
                 SettingsButton::RerollQuestions => {
+                    commands.trigger(RerollQuestionsEvent);
+                }
+                SettingsButton::NextDictionary => {
+                    current_dictionary.0 = (current_dictionary.0 + 1) % dictionaries.len();
+                    **text = dictionaries[current_dictionary.0].title.clone();
                     commands.trigger(RerollQuestionsEvent);
                 }
             }
@@ -568,8 +587,8 @@ fn handle_answer(
             .0;
         println!(
             "Question: {}, Answered: {}, correct answer: {correct_answer}",
+            question.question(*translation_direction),
             answer.0,
-            question.question(*translation_direction)
         );
 
         for (entity, mut color, mut border_color, _) in &mut buttons {
