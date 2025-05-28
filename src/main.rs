@@ -309,6 +309,7 @@ fn setup_question(
         .clone();
     **question_text = new_question.question(*translation_direction);
     question_font.font = translation_direction.question_font(&fonts);
+    question_font.font_size = 75.0;
     question.0 = new_question;
 
     next_answering_state.set(AnsweringState::Answering);
