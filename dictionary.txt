@@ -5,26 +5,19 @@ W:
 පාට - color
 සුද්දා - white person
 ඩුඉ ජාසිංහ - Dui Jasinghe 🥰
-අක්කි - big sister
+අක්කි - older sister
 ආච්චි - grandma
+සීයා  - grandpa
 අම්මා - mom
 බබා - child (kinda)
 නංගා - little sister(?)
-තාත්තා - father
+තාත්තා - dad
 අයියා - older brother
 මිරිස් කුඩු - Chili powder
 සහ - and
 ලුනු - salt
 වලසා - bear
 පූසා - cat
-ජායාරූපකරණය - photographer?
-නිෂ්වල - still?
-ණය - profession ending
-ගායනය - singers
-ගයන - singer
-කලා - art
-අධ්‍යකෂණය - director
-කතාව - story
 සුභ උදෑසනක් - good morning
 ඉඳගන [එප්පා] - [Don't] sit (down) 
 සුළඟ/හුළඟ - (the) wind
@@ -72,6 +65,9 @@ W:
 අලියා - elephant
 කොටියා - leopard
 වලහ - bear
+නිෂ්වල - still?
+කලා - art
+කතාව - story
 
 a-Z:
 ක  - ka
