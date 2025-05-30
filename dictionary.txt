@@ -44,7 +44,7 @@ W:
 මම - I
 ගල් සියඹලා - Dui's favorite fruit (Gal siambala)
 කන්නද? - eat?
-කතුවා - to eat
+කනවා - to eat
 -ගේ - possessive ('s)
 පොත - book
 ස්තූති - thank you
@@ -54,7 +54,7 @@ W:
 බඩ ගිනි - hungry (stomach (is on) fire)
 වැදි - more (or no more food)
 තය - more (or more food)
-අයූබොයන් - welcome
+අයූබොවන් - welcome 
 කටට රසට - mouthwatering (delicious)
 කට - mouth
 රසයි - delicious
@@ -65,7 +65,7 @@ W:
 අලියා - elephant
 කොටියා - leopard
 වලහ - bear
-නිෂ්වල - still?
+නිෂල - still
 කලා - art
 කතාව - story
 
