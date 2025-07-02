@@ -14,7 +14,7 @@ use bevy::text::TextLayoutInfo;
 use bevy::ui::widget::TextNodeFlags;
 use bevy::window::PrimaryWindow;
 use bevy_asset_loader::prelude::*;
-use bevy_inspector_egui::bevy_egui::EguiPlugin;
+//use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use rand::{prelude::SliceRandom, seq::IteratorRandom};
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
@@ -205,9 +205,9 @@ fn main() {
                     }),
                     ..default()
                 }),
-            EguiPlugin {
-                enable_multipass_for_primary_context: true,
-            },
+            //EguiPlugin {
+            //    enable_multipass_for_primary_context: true,
+            //},
             //WorldInspectorPlugin::new(),
             //SimpleSubsecondPlugin::default(),
         ))
