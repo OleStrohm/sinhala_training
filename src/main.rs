@@ -1,7 +1,18 @@
+use std::sync::Arc;
+
 use bevy::ecs::spawn::SpawnIter;
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::text::ComputedTextBlock;
-use bevy::text::cosmic_text::Buffer;
+use bevy::text::CosmicFontSystem;
+use bevy::text::LineHeight;
+use bevy::text::cosmic_text;
+use bevy::text::cosmic_text::fontdb;
+use bevy::text::cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Wrap};
+use bevy::text::TextBounds;
+use bevy::text::TextLayoutInfo;
+use bevy::ui::widget::TextNodeFlags;
+use bevy::window::PrimaryWindow;
 use bevy_asset_loader::prelude::*;
 use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use rand::{prelude::SliceRandom, seq::IteratorRandom};
@@ -177,6 +188,7 @@ fn main() {
         .insert_resource(AllQuestions(dictionaries))
         .insert_resource(CurrentDictionary(0))
         .insert_resource(TranslateDirection::SinhalaToEnglish)
+        .init_resource::<FitToParentFonts>()
         .add_plugins((
             DefaultPlugins
                 .set(AssetPlugin {
@@ -235,19 +247,239 @@ fn buffer_dimensions(buffer: &Buffer) -> Vec2 {
     Vec2::new(width, height).ceil()
 }
 
-fn fit_to_parent(
-    mut texts: Query<(&ChildOf, &mut TextFont, &ComputedTextBlock), With<FitToParent>>,
-    nodes: Query<&ComputedNode>,
-) -> Result {
-    for (parent, mut text_font, computed_text_block) in &mut texts {
-        let computed_size = nodes.get(parent.parent())?.size();
-        let content_size = buffer_dimensions(computed_text_block.buffer());
-        let x_scale = computed_size.x / content_size.x;
-        let y_scale = computed_size.y / content_size.y;
-        let scale = x_scale.min(y_scale);
-        if scale < 1.2 {
-            text_font.font_size *= 0.95;
+#[derive(Clone)]
+struct FontFaceInfo {
+    stretch: fontdb::Stretch,
+    style: fontdb::Style,
+    weight: fontdb::Weight,
+    family_name: Arc<str>,
+}
+
+/// Find the size of the text when rendered with the given parameters.
+pub fn measure_text(
+    fonts: &Assets<Font>,
+    font_system: &mut FontSystem,
+    scale_factor: f32,
+    line_height: LineHeight,
+    alignment: JustifyText,
+    width: Option<f32>,
+    height: Option<f32>,
+    linebreak: LineBreak,
+    entity: Entity,
+    text_reader: &mut TextUiReader,
+    font_size_override: f32,
+    map_handle_to_font_id: &mut HashMap<AssetId<Font>, (fontdb::ID, Arc<str>)>,
+) -> Vec2 {
+    let mut buffer = Buffer::new(
+        font_system,
+        Metrics {
+            font_size: font_size_override,
+            line_height: match line_height {
+                LineHeight::Px(px) => px,
+                LineHeight::RelativeToFont(scale) => scale * font_size_override,
+            },
         }
+        .scale(scale_factor),
+    );
+    buffer.set_size(font_system, width, height);
+    buffer.set_wrap(
+        font_system,
+        match linebreak {
+            LineBreak::WordBoundary => Wrap::Word,
+            LineBreak::AnyCharacter => Wrap::Glyph,
+            LineBreak::WordOrCharacter => Wrap::WordOrGlyph,
+            LineBreak::NoWrap => Wrap::None,
+        },
+    );
+    let mut spans: Vec<(usize, &str, TextFont, FontFaceInfo, Color)> = vec![];
+
+    fn load_font_to_fontdb(
+        font_handle: Handle<Font>,
+        font_system: &mut FontSystem,
+        map_handle_to_font_id: &mut HashMap<AssetId<Font>, (fontdb::ID, Arc<str>)>,
+        fonts: &Assets<Font>,
+    ) -> FontFaceInfo {
+        let (face_id, family_name) = map_handle_to_font_id
+            .entry(font_handle.id())
+            .or_insert_with(|| {
+                let font = fonts.get(font_handle.id()).expect(
+                "Tried getting a font that was not available, probably due to not being loaded yet",
+            );
+                let data = Arc::clone(&font.data);
+                let ids = font_system
+                    .db_mut()
+                    .load_font_source(fontdb::Source::Binary(data));
+
+                let face_id = *ids.last().unwrap();
+                let face = font_system.db().face(face_id).unwrap();
+                let family_name = Arc::from(face.families[0].0.as_str());
+
+                (face_id, family_name)
+            });
+        let face = font_system.db().face(*face_id).unwrap();
+
+        FontFaceInfo {
+            stretch: face.stretch,
+            style: face.style,
+            weight: face.weight,
+            family_name: family_name.clone(),
+        }
+    }
+
+    for (span_index, (entity, _depth, span, text_font, color)) in
+        text_reader.iter(entity).enumerate()
+    {
+        let mut text_font = text_font.clone();
+        if span.is_empty() {
+            continue;
+        }
+        // Return early if a font is not loaded yet.
+        if !fonts.contains(text_font.font.id()) {
+            spans.clear();
+
+            panic!();
+        }
+
+        // Get max font size for use in cosmic Metrics.
+        text_font.font_size = font_size_override;
+
+        // Load Bevy fonts into cosmic-text's font system.
+        let face_info = load_font_to_fontdb(
+            text_font.font.clone(),
+            font_system,
+            map_handle_to_font_id,
+            fonts,
+        );
+
+        // Save spans that aren't zero-sized.
+        if scale_factor <= 0.0 || font_size_override <= 0.0 {
+            once!(warn!(
+                "Text span {entity} has a font size <= 0.0. Nothing will be displayed.",
+            ));
+
+            continue;
+        }
+        spans.push((span_index, span, text_font, face_info, color));
+    }
+    fn get_attrs<'a>(
+        span_index: usize,
+        text_font: &TextFont,
+        color: Color,
+        face_info: &'a FontFaceInfo,
+        scale_factor: f64,
+    ) -> Attrs<'a> {
+        Attrs::new()
+            .metadata(span_index)
+            .family(Family::Name(&face_info.family_name))
+            .stretch(face_info.stretch)
+            .style(face_info.style)
+            .weight(face_info.weight)
+            .metrics(
+                Metrics {
+                    font_size: text_font.font_size,
+                    line_height: match text_font.line_height {
+                        LineHeight::Px(px) => px,
+                        LineHeight::RelativeToFont(scale) => scale * text_font.font_size,
+                    },
+                }
+                .scale(scale_factor as f32),
+            )
+            .color(cosmic_text::Color(color.to_linear().as_u32()))
+    }
+    let spans_iter = spans
+        .iter()
+        .map(|(span_index, span, text_font, font_info, color)| {
+            (
+                *span,
+                get_attrs(
+                    *span_index,
+                    text_font,
+                    *color,
+                    font_info,
+                    scale_factor as f64,
+                ),
+            )
+        });
+    buffer.set_rich_text(
+        font_system,
+        spans_iter,
+        Attrs::new(),
+        Shaping::Advanced,
+        Some(alignment.into()),
+    );
+    buffer.shape_until_scroll(font_system, false);
+    buffer.set_size(font_system, width, height);
+    let (width, height) = buffer
+        .layout_runs()
+        .map(|run| (run.line_w, run.line_height))
+        .reduce(|(w1, h1), (w2, h2)| (w1.max(w2), h1 + h2))
+        .unwrap_or((0.0, 0.0));
+    (Vec2::new(width, height)).ceil()
+}
+
+#[derive(Debug, Resource, Default)]
+struct FitToParentFonts(HashMap<AssetId<Font>, (fontdb::ID, Arc<str>)>);
+
+fn fit_to_parent(
+    mut font_system: ResMut<CosmicFontSystem>,
+    fonts: Res<Assets<Font>>,
+    mut texts: Query<
+        (
+            Entity,
+            &ChildOf,
+            Ref<Text>,
+            &mut TextFont,
+            Ref<ComputedTextBlock>,
+            &TextLayout,
+            &ComputedNode,
+            &TextLayoutInfo,
+            &TextNodeFlags,
+        ),
+        With<FitToParent>,
+    >,
+    nodes: Query<Ref<ComputedNode>>,
+    //mut param_set: ParamSet<(Query<&mut TextFont>, TextUiReader)>,
+    mut map_handle_to_font_id: ResMut<FitToParentFonts>,
+) -> Result {
+    for (entity, parent, text, mut text_font, computed_text_block, text_layout, computed_node, text_layout_info, text_node_flags) in &mut texts {
+        let parent_node = nodes.get(parent.parent())?;
+
+        let parent_size = 0.9 * parent_node.content_size();
+        let computed_size = computed_node.content_size();
+        if computed_size.x > parent_size.x || computed_size.y > parent_size.y {
+            text_font.font_size -= 5.0;
+        }
+        //let content_size = buffer_dimensions(computed_text_block.buffer());
+        //dbg!(text_layout_info);
+
+        //for font_size in (1..10).map(|i| i as f32 * 10.0).rev() {
+        //    let text_font = param_set.p0().get(entity)?.clone();
+        //    let mut text_reader = param_set.p1();
+        //    let measurement = measure_text(
+        //        &fonts,
+        //        &mut font_system.0,
+        //        computed_node.inverse_scale_factor().recip(),
+        //        text_font.line_height,
+        //        JustifyText::Center,
+        //        Some(computed_size.x),
+        //        Some(computed_size.y),
+        //        text_layout.linebreak,
+        //        entity,
+        //        &mut text_reader,
+        //        font_size,
+        //        &mut map_handle_to_font_id.0,
+        //    );
+        //    let fits = measurement.x <= computed_size.x && measurement.y <= computed_size.y;
+        //    let content_size = text_layout_info.size * computed_node.inverse_scale_factor().recip();
+        //    println!(
+        //        "{}, at font_size {font_size} fits? {fits}. measurement: {measurement}, content_size: {content_size}, parent size: {computed_size}",
+        //        text.0,
+        //    );
+        //    if fits && measurement.x != 0. && measurement.y != 0. {
+        //        param_set.p0().get_mut(entity)?.font_size = font_size;
+        //        break;
+        //    }
+        //}
     }
 
     Ok(())
@@ -333,6 +565,7 @@ fn setup_question(
         if let Ok((_, mut text, mut font)) = answer_texts.get_mut(e) {
             **text = q.answer(*translation_direction);
             font.font = translation_direction.answer_font(&fonts);
+            font.font_size = 50.0;
         }
     }
 }
@@ -371,7 +604,6 @@ fn icon(text: impl Into<String>, font_size: f32, fonts: &Res<Fonts>) -> impl Bun
 fn top(dictionary_title: &str, fonts: &Res<Fonts>) -> impl Bundle {
     (
         Node {
-            flex_grow: 1.0,
             display: Display::Grid,
             width: Val::Percent(100.0),
             grid_template_rows: vec![RepeatedGridTrack::percent(1, 100.0)],
@@ -403,7 +635,7 @@ fn top(dictionary_title: &str, fonts: &Res<Fonts>) -> impl Bundle {
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                children![(QuestionText, sinhala("", 75.0, fonts))],
+                children![(QuestionText, FitToParent, sinhala("", 75.0, fonts))],
             ),
             (
                 Node {
@@ -437,7 +669,6 @@ fn bottom(questions: &Res<Questions>, fonts: &Res<Fonts>) -> impl Bundle {
         AnswerBox,
         Node {
             display: Display::Grid,
-            flex_grow: 3.0,
             width: Val::Percent(100.0),
             grid_template_rows: vec![RepeatedGridTrack::percent(5, 20.0)],
             grid_template_columns: vec![RepeatedGridTrack::percent(5, 20.0)],
@@ -480,12 +711,14 @@ fn spawn_text(
 
     commands.spawn((
         Node {
-            display: Display::Flex,
+            display: Display::Grid,
             width: Val::Percent(100.0),
             height: Val::Percent(100.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            flex_direction: FlexDirection::Column,
+            grid_template_rows: vec![
+                RepeatedGridTrack::percent(1, 20.0),
+                RepeatedGridTrack::percent(1, 80.0),
+            ],
+            grid_template_columns: vec![RepeatedGridTrack::percent(1, 100.0)],
             ..default()
         },
         children![
