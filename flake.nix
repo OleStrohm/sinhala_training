@@ -48,6 +48,7 @@
           cargoExtraArgs = "--no-default-features";
           CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
           CARGO_PROFILE = "release";
+          #RUSTFLAGS = "-Zfmt-debug=none -Zlocation-detail=none";
         };
         cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
           doCheck = false;
