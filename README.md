@@ -2,7 +2,7 @@
 
 This is an app that allows you to learn the Sinhala language.
 
-It is currently hosted on [https://sinhala.ole.strohm.no]
+It is currently hosted on https://sinhala.ole.strohm.no
 
 ## Usage
 
