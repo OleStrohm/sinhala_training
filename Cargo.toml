@@ -16,6 +16,7 @@ bevy = { version = "0.16.0", default-features = false, features = [
 bevy_asset_loader = { version = "0.23.0" }
 #bevy_simple_subsecond_system = "0.1.11"
 rand = "0.8.5"
+webbrowser = "1.0.5"
 
 [features]
 default = [

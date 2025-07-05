@@ -6,11 +6,11 @@ use bevy::prelude::*;
 use bevy::text::ComputedTextBlock;
 use bevy::text::CosmicFontSystem;
 use bevy::text::LineHeight;
+use bevy::text::TextBounds;
+use bevy::text::TextLayoutInfo;
 use bevy::text::cosmic_text;
 use bevy::text::cosmic_text::fontdb;
 use bevy::text::cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Wrap};
-use bevy::text::TextBounds;
-use bevy::text::TextLayoutInfo;
 use bevy::ui::widget::TextNodeFlags;
 use bevy::window::PrimaryWindow;
 use bevy_asset_loader::prelude::*;
@@ -34,6 +34,7 @@ struct AnswerBox;
 struct AnswerButton;
 #[derive(Debug, Component)]
 enum SettingsButton {
+    GithubLink,
     SwitchDirection,
     RerollQuestions,
     NextDictionary,
@@ -85,7 +86,7 @@ impl TranslateDirection {
     }
 }
 
-#[derive(Debug, Resource, Deref, DerefMut, PartialEq, Eq)]
+#[derive(Debug, Default, Resource, Deref, DerefMut, PartialEq, Eq)]
 struct Question(Pair);
 #[derive(Debug, Resource, Deref, DerefMut)]
 struct Questions(Vec<Pair>);
@@ -105,7 +106,7 @@ use pair::Pair;
 mod pair {
     use super::TranslateDirection;
 
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq)]
     pub struct Pair {
         sinhala: String,
         english: String,
@@ -441,7 +442,18 @@ fn fit_to_parent(
     //mut param_set: ParamSet<(Query<&mut TextFont>, TextUiReader)>,
     mut map_handle_to_font_id: ResMut<FitToParentFonts>,
 ) -> Result {
-    for (entity, parent, text, mut text_font, computed_text_block, text_layout, computed_node, text_layout_info, text_node_flags) in &mut texts {
+    for (
+        entity,
+        parent,
+        text,
+        mut text_font,
+        computed_text_block,
+        text_layout,
+        computed_node,
+        text_layout_info,
+        text_node_flags,
+    ) in &mut texts
+    {
         let parent_node = nodes.get(parent.parent())?;
 
         let parent_size = 0.9 * parent_node.content_size();
@@ -561,7 +573,11 @@ fn setup_question(
 
     let mut answer_text_entities = answer_texts.iter().map(|(e, ..)| e).collect::<Vec<_>>();
     answer_text_entities.sort();
-    for (q, e) in questions.iter().zip(answer_text_entities) {
+    for (q, &e) in questions
+        .iter()
+        .chain(std::iter::repeat(&default()))
+        .zip(&answer_text_entities)
+    {
         if let Ok((_, mut text, mut font)) = answer_texts.get_mut(e) {
             **text = q.answer(*translation_direction);
             font.font = translation_direction.answer_font(&fonts);
@@ -622,11 +638,23 @@ fn top(dictionary_title: &str, fonts: &Res<Fonts>) -> impl Bundle {
                     padding: UiRect::all(Val::Px(5.0)),
                     ..default()
                 },
-                children![(
-                    SettingsButton::SwitchDirection,
-                    button(),
-                    children![sinhala("ක -> ka", 50.0, fonts)],
-                )],
+                children![
+                    (
+                        SettingsButton::SwitchDirection,
+                        button(),
+                        children![sinhala("ක -> ka", 50.0, fonts)],
+                    ),
+                    (
+                        SettingsButton::RerollQuestions,
+                        button(),
+                        children![icon(" ", 50.0, fonts)],
+                    ),
+                    (
+                        SettingsButton::NextDictionary,
+                        button(),
+                        children![english(dictionary_title, 50.0, fonts)],
+                    )
+                ],
             ),
             (
                 Node {
@@ -647,24 +675,17 @@ fn top(dictionary_title: &str, fonts: &Res<Fonts>) -> impl Bundle {
                     padding: UiRect::all(Val::Px(5.0)),
                     ..default()
                 },
-                children![
-                    (
-                        SettingsButton::RerollQuestions,
-                        button(),
-                        children![icon(" ", 50.0, fonts)],
-                    ),
-                    (
-                        SettingsButton::NextDictionary,
-                        button(),
-                        children![english(dictionary_title, 50.0, fonts)],
-                    )
-                ],
+                children![(
+                    SettingsButton::GithubLink,
+                    button(),
+                    children![icon("󰊤 ", 50.0, fonts)],
+                ),],
             )
         ],
     )
 }
 
-fn bottom(questions: &Res<Questions>, fonts: &Res<Fonts>) -> impl Bundle {
+fn bottom(fonts: &Res<Fonts>) -> impl Bundle {
     (
         AnswerBox,
         Node {
@@ -675,9 +696,7 @@ fn bottom(questions: &Res<Questions>, fonts: &Res<Fonts>) -> impl Bundle {
             ..default()
         },
         Children::spawn(SpawnIter(
-            questions
-                .0
-                .iter()
+            [(); 25]
                 .map(|_| {
                     (
                         AnswerButton,
@@ -694,7 +713,6 @@ fn bottom(questions: &Res<Questions>, fonts: &Res<Fonts>) -> impl Bundle {
                         children![(AnswerText, FitToParent, english("", 50.0, fonts))],
                     )
                 })
-                .collect::<Vec<_>>()
                 .into_iter(),
         )),
     )
@@ -703,7 +721,6 @@ fn bottom(questions: &Res<Questions>, fonts: &Res<Fonts>) -> impl Bundle {
 fn spawn_text(
     mut commands: Commands,
     fonts: Res<Fonts>,
-    questions: Res<Questions>,
     current_dictionary: Res<CurrentDictionary>,
     dictionaries: Res<AllQuestions>,
 ) {
@@ -723,7 +740,7 @@ fn spawn_text(
         },
         children![
             top(&dictionaries[current_dictionary.0].title, &fonts),
-            bottom(&questions, &fonts)
+            bottom(&fonts)
         ],
     ));
 
@@ -776,6 +793,9 @@ fn settings_button_system(
         };
         if *interaction == Interaction::Pressed {
             match setting {
+                SettingsButton::GithubLink => {
+                    let _ = webbrowser::open("https://github.com/OleStrohm/sinhala_training/");
+                }
                 SettingsButton::SwitchDirection => {
                     *translation_direction = match *translation_direction {
                         TranslateDirection::SinhalaToEnglish => {
