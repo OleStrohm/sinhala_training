@@ -1,3 +1,22 @@
+W2:
+කුකුල් - chicken
+කුකුලො - chickens
+මස් - meat
+කයි - will eat
+ගන්න - take
+අයියෝ - aiyoo
+අම්මෝ - ammō
+ගස් ලබු - papaw
+ගෙඩිය - fruit/lump
+බූරුවා - donkey
+කිරි - milk
+බත් - rice
+පරිප්පු - parippu
+ඔව් - yes
+නැ - no
+කොත්තු - kottu
+ඉඳිආප්ප - string hopper
+
 W:
 කලු - black
 සුදු - white
@@ -80,25 +99,6 @@ Numbers:
 අට - 8
 නවය - 9
 දහය - 10
-
-W2:
-කුකුල් - chicken
-කුකුලො - chickens
-මස් - meat
-කයි - will eat
-ගන්න - take
-අයියෝ - aiyoo
-අම්මෝ - ammō
-ගස් ලබු - papaw
-ගෙඩිය - fruit/lump
-බූරුවා - donkey
-කිරි - milk
-බත් - rice
-පරිප්පු - parippu
-ඔව් - yes
-නැ - no
-කොත්තු - kottu
-ඉඳිආප්ප - string hopper
 
 a-Z:
 ක  - ka
