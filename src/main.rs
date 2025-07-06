@@ -592,6 +592,7 @@ fn button() -> impl Bundle {
         Node {
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
+            padding: UiRect::vertical(Val::Px(5.0)),
             ..default()
         },
     )
@@ -640,14 +641,14 @@ fn top(dictionary_title: &str, fonts: &Res<Fonts>) -> impl Bundle {
                 },
                 children![
                     (
-                        SettingsButton::SwitchDirection,
-                        button(),
-                        children![sinhala("ක -> ka", 50.0, fonts)],
-                    ),
-                    (
                         SettingsButton::RerollQuestions,
                         button(),
                         children![icon(" ", 50.0, fonts)],
+                    ),
+                    (
+                        SettingsButton::SwitchDirection,
+                        button(),
+                        children![sinhala("ක -> ka", 50.0, fonts)],
                     ),
                     (
                         SettingsButton::NextDictionary,
