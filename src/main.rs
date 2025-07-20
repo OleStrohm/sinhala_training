@@ -1,20 +1,22 @@
 use std::sync::Arc;
+use std::time::Duration;
 
+use bevy::ecs::bundle::BundleEffect;
+use bevy::ecs::bundle::DynamicBundle;
 use bevy::ecs::spawn::SpawnIter;
+use bevy::ecs::system::IntoObserverSystem;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::text::ComputedTextBlock;
 use bevy::text::CosmicFontSystem;
 use bevy::text::LineHeight;
-use bevy::text::TextBounds;
 use bevy::text::TextLayoutInfo;
 use bevy::text::cosmic_text;
 use bevy::text::cosmic_text::fontdb;
 use bevy::text::cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Wrap};
 use bevy::ui::widget::TextNodeFlags;
-use bevy::window::PrimaryWindow;
+use bevy::winit::WinitSettings;
 use bevy_asset_loader::prelude::*;
-//use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use rand::{prelude::SliceRandom, seq::IteratorRandom};
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
@@ -93,8 +95,6 @@ struct Questions(Vec<Pair>);
 #[derive(Debug, Resource, Deref, DerefMut)]
 struct AllQuestions(Vec<Dictionary>);
 
-#[derive(Event)]
-struct AnsweredEvent(pub Entity);
 #[derive(Event)]
 struct RestartEvent;
 #[derive(Event)]
@@ -181,7 +181,6 @@ fn main() {
     let question = questions.iter().choose(&mut thread_rng).unwrap().clone();
 
     App::new()
-        .add_event::<AnsweredEvent>()
         .add_event::<RestartEvent>()
         .add_event::<RerollQuestionsEvent>()
         .insert_resource(Question(question))
@@ -190,28 +189,23 @@ fn main() {
         .insert_resource(CurrentDictionary(0))
         .insert_resource(TranslateDirection::SinhalaToEnglish)
         .init_resource::<FitToParentFonts>()
-        .add_plugins((
-            DefaultPlugins
-                .set(AssetPlugin {
-                    meta_check: bevy::asset::AssetMetaCheck::Never,
-                    ..default()
-                })
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "Sinhala training".into(),
-                        canvas: Some("#bevy".into()),
-                        fit_canvas_to_parent: true,
-                        prevent_default_event_handling: true,
-                        ..default()
-                    }),
+        .insert_resource(WinitSettings::mobile())
+        .add_plugins((DefaultPlugins
+            .set(AssetPlugin {
+                meta_check: bevy::asset::AssetMetaCheck::Never,
+                ..default()
+            })
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "Sinhala training".into(),
+                    canvas: Some("#bevy".into()),
+                    fit_canvas_to_parent: true,
+                    prevent_default_event_handling: true,
+                    present_mode: bevy::window::PresentMode::AutoNoVsync,
                     ..default()
                 }),
-            //EguiPlugin {
-            //    enable_multipass_for_primary_context: true,
-            //},
-            //WorldInspectorPlugin::new(),
-            //SimpleSubsecondPlugin::default(),
-        ))
+                ..default()
+            }),))
         .init_state::<AnsweringState>()
         .init_state::<LoadingStates>()
         .add_loading_state(
@@ -222,23 +216,18 @@ fn main() {
         .add_systems(OnEnter(LoadingStates::Loaded), spawn_text)
         .add_systems(
             Update,
-            (
-                settings_button_system,
-                reset_one_second_after_answer,
-                button_system,
-                handle_answer,
-            )
+            (settings_button_system, reset_one_second_after_answer)
                 .chain()
                 .run_if(in_state(LoadingStates::Loaded)),
         )
-        .add_systems(Update, fit_to_parent) //.run_if(on_timer(Duration::from_millis(100))))
+        .add_systems(Update, fit_to_parent)
         .add_observer(setup_question)
         .add_observer(reroll_questions)
         .add_observer(next_question)
         .run();
 }
 
-fn buffer_dimensions(buffer: &Buffer) -> Vec2 {
+pub fn buffer_dimensions(buffer: &Buffer) -> Vec2 {
     let (width, height) = buffer
         .layout_runs()
         .map(|run| (run.line_w, run.line_height))
@@ -419,11 +408,11 @@ pub fn measure_text(
 }
 
 #[derive(Debug, Resource, Default)]
-struct FitToParentFonts(HashMap<AssetId<Font>, (fontdb::ID, Arc<str>)>);
+pub struct FitToParentFonts; //(HashMap<AssetId<Font>, (fontdb::ID, Arc<str>)>);
 
 fn fit_to_parent(
-    mut font_system: ResMut<CosmicFontSystem>,
-    fonts: Res<Assets<Font>>,
+    mut _font_system: ResMut<CosmicFontSystem>,
+    _fonts: Res<Assets<Font>>,
     mut texts: Query<
         (
             Entity,
@@ -440,18 +429,18 @@ fn fit_to_parent(
     >,
     nodes: Query<Ref<ComputedNode>>,
     //mut param_set: ParamSet<(Query<&mut TextFont>, TextUiReader)>,
-    mut map_handle_to_font_id: ResMut<FitToParentFonts>,
+    mut _map_handle_to_font_id: ResMut<FitToParentFonts>,
 ) -> Result {
     for (
-        entity,
+        _entity,
         parent,
-        text,
+        _text,
         mut text_font,
-        computed_text_block,
-        text_layout,
+        _computed_text_block,
+        _text_layout,
         computed_node,
-        text_layout_info,
-        text_node_flags,
+        _text_layout_info,
+        _text_node_flags,
     ) in &mut texts
     {
         let parent_node = nodes.get(parent.parent())?;
@@ -579,9 +568,12 @@ fn setup_question(
         .zip(&answer_text_entities)
     {
         if let Ok((_, mut text, mut font)) = answer_texts.get_mut(e) {
-            **text = q.answer(*translation_direction);
+            let new_text = q.answer(*translation_direction);
+            if text.0 != new_text {
+                font.font_size = 50.0;
+            }
+            **text = new_text;
             font.font = translation_direction.answer_font(&fonts);
-            font.font_size = 50.0;
         }
     }
 }
@@ -603,6 +595,7 @@ fn text_with_font(text: impl Into<String>, font_size: f32, font: Handle<Font>) -
         Text::new(text),
         TextFont::from_font(font).with_font_size(font_size),
         TextLayout::new_with_justify(JustifyText::Center),
+        Pickable::IGNORE,
     )
 }
 
@@ -686,6 +679,58 @@ fn top(dictionary_title: &str, fonts: &Res<Fonts>) -> impl Bundle {
     )
 }
 
+pub struct BundleEffectFn<F>(F);
+
+unsafe impl<F: Send + Sync + FnOnce(&mut EntityWorldMut) + 'static> Bundle for BundleEffectFn<F> {
+    fn component_ids(
+        _: &mut bevy::ecs::component::ComponentsRegistrator,
+        _: &mut impl FnMut(bevy::ecs::component::ComponentId),
+    ) {
+    }
+
+    fn get_component_ids(
+        _: &bevy::ecs::component::Components,
+        _: &mut impl FnMut(Option<bevy::ecs::component::ComponentId>),
+    ) {
+    }
+
+    fn register_required_components(
+        _: &mut bevy::ecs::component::ComponentsRegistrator,
+        _: &mut bevy::ecs::component::RequiredComponents,
+    ) {
+    }
+}
+
+impl<F: Send + Sync + FnOnce(&mut EntityWorldMut) + 'static> DynamicBundle for BundleEffectFn<F> {
+    type Effect = BundleEffectFn<F>;
+
+    fn get_components(
+        self,
+        _: &mut impl FnMut(bevy::ecs::component::StorageType, bevy::ptr::OwningPtr<'_>),
+    ) -> Self::Effect {
+        self
+    }
+}
+
+impl<F: Send + Sync + FnOnce(&mut EntityWorldMut) + 'static> BundleEffect for BundleEffectFn<F> {
+    fn apply(self, entity: &mut EntityWorldMut) {
+        (self.0)(entity);
+    }
+}
+
+fn observe<
+    E: Event,
+    B: Bundle,
+    M: Send + Sync + 'static,
+    O: IntoObserverSystem<E, B, M> + Send + Sync + 'static,
+>(
+    o: O,
+) -> BundleEffectFn<impl FnOnce(&mut EntityWorldMut)> {
+    BundleEffectFn(move |entity: &mut EntityWorldMut| {
+        entity.observe(o);
+    })
+}
+
 fn bottom(fonts: &Res<Fonts>) -> impl Bundle {
     (
         AnswerBox,
@@ -712,6 +757,10 @@ fn bottom(fonts: &Res<Fonts>) -> impl Bundle {
                         BorderColor(Color::BLACK),
                         BackgroundColor(NORMAL_BUTTON),
                         children![(AnswerText, FitToParent, english("", 50.0, fonts))],
+                        observe(handle_answer),
+                        observe(on_hover),
+                        observe(on_unhover),
+                        observe(on_click_bg),
                     )
                 })
                 .into_iter(),
@@ -746,35 +795,6 @@ fn spawn_text(
     ));
 
     commands.trigger(RestartEvent);
-}
-
-fn button_system(
-    mut interaction_query: Query<
-        (Entity, &Interaction, &mut BackgroundColor, &mut BorderColor),
-        (Changed<Interaction>, With<AnswerButton>),
-    >,
-    mut answered: EventWriter<AnsweredEvent>,
-    answering_state: Res<State<AnsweringState>>,
-) {
-    if !matches!(**answering_state, AnsweringState::Answering) {
-        return;
-    }
-    for (entity, interaction, mut color, mut border_color) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                *color = PRESSED_BUTTON.into();
-                answered.write(AnsweredEvent(entity));
-            }
-            Interaction::Hovered => {
-                *color = HOVER_BUTTON.into();
-                border_color.0 = Color::WHITE;
-            }
-            Interaction::None => {
-                *color = NORMAL_BUTTON.into();
-                border_color.0 = Color::BLACK;
-            }
-        }
-    }
 }
 
 fn settings_button_system(
@@ -824,51 +844,53 @@ fn settings_button_system(
 }
 
 fn handle_answer(
+    trigger: Trigger<Pointer<Click>>,
     children: Query<&Children>,
-    mut buttons: Query<
-        (Entity, &mut BackgroundColor, &mut BorderColor, &Children),
-        With<AnswerButton>,
-    >,
+    buttons: Query<(Entity, &Children), With<AnswerButton>>,
+    mut border_color: Query<&mut BorderColor>,
     text: Query<&Text>,
-    mut answered: ResMut<Events<AnsweredEvent>>,
     mut next_answering_state: ResMut<NextState<AnsweringState>>,
     question: Res<Question>,
     translation_direction: Res<TranslateDirection>,
     time: Res<Time>,
 ) {
-    for AnsweredEvent(answered_entity) in answered.drain().take(1) {
-        next_answering_state.set(AnsweringState::Answered(
-            (time.elapsed_secs() * 1000.0) as u32,
-        ));
+    let target = trigger.event().target;
 
-        let answer = &text.get(children.get(answered_entity).unwrap()[0]).unwrap();
-        let correct_answer = question.answer(*translation_direction);
-        let correct_entity = buttons
-            .iter()
-            .find(|(_, _, _, children)| text.get(children[0]).unwrap().0 == correct_answer)
-            .unwrap()
-            .0;
-        println!(
-            "Question: {}, Answered: {}, correct answer: {correct_answer}",
-            question.question(*translation_direction),
-            answer.0,
-        );
+    next_answering_state.set(AnsweringState::Answered(
+        (time.elapsed_secs() * 1000.0) as u32,
+    ));
 
-        for (entity, mut color, mut border_color, _) in &mut buttons {
-            if entity == answered_entity {
-                *color = PRESSED_BUTTON.into();
-                if answer.0 == correct_answer {
-                    border_color.0 = Color::srgb(0.0, 1.0, 0.0);
-                } else {
-                    border_color.0 = Color::srgb(1.0, 0.0, 0.0);
-                }
-            } else if entity == correct_entity {
-                *color = NORMAL_BUTTON.into();
-                border_color.0 = Color::srgb(0.0, 0.0, 1.0);
-            } else {
-                *color = NORMAL_BUTTON.into();
-                border_color.0 = Color::BLACK;
-            }
-        }
+    let answer = &text.get(children.get(target).unwrap()[0]).unwrap().0;
+    let correct_answer = question.answer(*translation_direction);
+    let correct_entity = buttons
+        .iter()
+        .find(|(_, children)| text.get(children[0]).unwrap().0 == correct_answer)
+        .unwrap()
+        .0;
+    println!(
+        "Question: {}, Answered: {answer}, correct answer: {correct_answer}",
+        question.question(*translation_direction),
+    );
+
+    for mut border_color in &mut border_color {
+        border_color.0 = Color::BLACK;
     }
+    border_color.get_mut(correct_entity).unwrap().0 = Color::srgb(0.0, 0.0, 1.0);
+    border_color.get_mut(target).unwrap().0 = if answer == &correct_answer {
+        Color::srgb(0.0, 1.0, 0.0)
+    } else {
+        Color::srgb(1.0, 0.0, 0.0)
+    };
+}
+
+fn on_hover(trigger: Trigger<Pointer<Over>>, mut bg_color: Query<&mut BackgroundColor>) {
+    bg_color.get_mut(trigger.event().target).unwrap().0 = HOVER_BUTTON;
+}
+
+fn on_unhover(trigger: Trigger<Pointer<Out>>, mut bg_color: Query<&mut BackgroundColor>) {
+    bg_color.get_mut(trigger.event().target).unwrap().0 = NORMAL_BUTTON;
+}
+
+fn on_click_bg(trigger: Trigger<Pointer<Pressed>>, mut bg_color: Query<&mut BackgroundColor>) {
+    bg_color.get_mut(trigger.event().target).unwrap().0 = PRESSED_BUTTON;
 }

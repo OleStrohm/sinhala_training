@@ -11,6 +11,7 @@ bevy = { version = "0.16.0", default-features = false, features = [
   "bevy_asset",
   "bevy_window",
   "multi_threaded",
+  "bevy_ui_picking_backend",
 ]}
 #bevy-inspector-egui = "0.31.0"
 bevy_asset_loader = { version = "0.23.0" }
