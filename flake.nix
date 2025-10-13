@@ -8,9 +8,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     crane.url = "github:ipetkov/crane";
     nixpkgs-for-wasm-bindgen.url = "github:NixOS/nixpkgs/4e6868b1aa3766ab1de169922bb3826143941973";
+    bevy_cli.url = "github:CupOfTeaJay/bevy_cli";
   };
 
-  outputs = { self, flake-utils, rust-overlay, nixpkgs, crane, nixpkgs-for-wasm-bindgen }:
+  outputs = { flake-utils, rust-overlay, nixpkgs, crane, bevy_cli, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
@@ -23,7 +24,6 @@
           extensions = [ "rust-analyzer" "clippy" "rust-src" "rustc-codegen-cranelift-preview" ];
           targets = [ "x86_64-unknown-linux-gnu" "wasm32-unknown-unknown" ];
         });
-        rustToolchain = rustToolchainFor pkgs;
         craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
 
         src = lib.cleanSourceWith {
@@ -53,24 +53,16 @@
         cargoArtifacts = craneLib.buildDepsOnly (commonArgs // {
           doCheck = false;
         });
-        binWeb = craneLib.buildTrunkPackage (commonArgs // {
+
+        buildBevyPackage = pkgs.lib.callPackageWith (pkgs // craneLib) ./buildBevyPackage.nix {};
+        binWeb = buildBevyPackage (commonArgs // {
           inherit cargoArtifacts;
 
-          wasm-bindgen-cli = pkgs.buildWasmBindgenCli rec {
-            src = pkgs.fetchCrate {
-              pname = "wasm-bindgen-cli";
-              version = "0.2.100";
-              hash = "sha256-3RJzK7mkYFrs7C/WkhW9Rr4LdP5ofb2FdYGz1P7Uxog=";
-            };
+          bevy_cli = bevy_cli.packages."x86_64-linux".default;
+          wasm-bindgen-cli = pkgs.wasm-bindgen-cli_0_2_100;
+          useBrotli = true;
 
-            cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-              inherit src;
-              inherit (src) pname version;
-              hash = "sha256-qsO12332HSjWCVKtf1cUePWWb9IdYUmT+8OPj/XP2WE=";
-            };
-          };
-
-          nativeBuildInputs = with pkgs; [ bash brotli ];
+          nativeBuildInputs = with pkgs; [ bash ];
         });
 
         dockerImage = pkgs.dockerTools.streamLayeredImage {
@@ -106,7 +98,7 @@
           devShells.default = moldDevShell {
             inherit buildInputs;
             LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
-            packages = [ pkgs.trunk ];
+            packages = with pkgs; [ trunk wasm-pack binaryen wasm-bindgen-cli_0_2_100 ];
           };
       }
     );

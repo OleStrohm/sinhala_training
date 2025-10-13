@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use bevy::ecs::bundle::BundleEffect;
 use bevy::ecs::bundle::DynamicBundle;
@@ -198,7 +197,6 @@ fn main() {
             .set(WindowPlugin {
                 primary_window: Some(Window {
                     title: "Sinhala training".into(),
-                    canvas: Some("#bevy".into()),
                     fit_canvas_to_parent: true,
                     prevent_default_event_handling: true,
                     present_mode: bevy::window::PresentMode::AutoNoVsync,

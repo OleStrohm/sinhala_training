@@ -22,7 +22,7 @@ webbrowser = "1.0.5"
 [features]
 default = [
     # Default to a native dev build.
-    "dev_native",
+    #"dev_native",
 ]
 dev_native = [
     "dev",
@@ -53,6 +53,10 @@ codegen-units = 1
 opt-level = 'z'
 lto = true
 strip = true
+
+[profile.web]
+inherits = "release"
+opt-level = 'z'
 
 [profile.wasm-dev]
 inherits = "dev"
